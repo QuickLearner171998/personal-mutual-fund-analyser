@@ -41,12 +41,19 @@ def render_sip_dashboard():
     cutoff_date = today - timedelta(days=45)
     
     for scheme, txns in sip_by_scheme.items():
-        # Sort by date
-        txns.sort(key=lambda x: datetime.strptime(x['date'], '%d-%b-%Y').date() if isinstance(x['date'], str) else x['date'], reverse=True)
+        # Sort by date (handle both string formats and date objects)
+        def parse_date(date_str_or_obj):
+            if isinstance(date_str_or_obj, str):
+                # Try ISO format first, then '%d-%b-%Y'
+                try:
+                    return datetime.strptime(date_str_or_obj, '%Y-%m-%d').date()
+                except ValueError:
+                    return datetime.strptime(date_str_or_obj, '%d-%b-%Y').date()
+            return date_str_or_obj # Already a date object
+        
+        txns.sort(key=lambda x: parse_date(x['date']), reverse=True)
         last_txn = txns[0]
-        last_date = last_txn['date']
-        if isinstance(last_date, str):
-            last_date = datetime.strptime(last_date, '%d-%b-%Y').date()
+        last_date = parse_date(last_txn['date'])
             
         is_active = last_date >= cutoff_date
         

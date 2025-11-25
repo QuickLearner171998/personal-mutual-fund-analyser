@@ -48,7 +48,7 @@ with st.sidebar:
     
     page = st.radio(
         "Navigation",
-        ["📊 Dashboard", "💰 SIP Analysis", "💬 AI Q&A", "📁 Upload CAS", "⚙️ Settings"],
+        ["📊 Dashboard", "💰 SIP Analysis", "💬 AI Q&A", "📁 Upload CAS"],
         label_visibility="collapsed"
     )
     
@@ -73,7 +73,3 @@ elif page == "💬 AI Q&A":
 elif page == "📁 Upload CAS":
     from ui.cas_upload import render_cas_upload
     render_cas_upload()
-    
-elif page == "⚙️ Settings":
-    from ui.settings import render_settings
-    render_settings()
