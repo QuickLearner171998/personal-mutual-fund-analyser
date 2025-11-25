@@ -10,34 +10,27 @@ import config
 
 class LLMWrapper:
     def __init__(self):
-        # Primary: gpt-4o
+        # Primary: gpt-5 (with reasoning)
         self.primary_llm = ChatOpenAI(
             model=config.PRIMARY_LLM_MODEL,
-            temperature=config.PRIMARY_LLM_TEMPERATURE,
-            max_tokens=config.PRIMARY_LLM_MAX_TOKENS,
             api_key=config.OPENAI_API_KEY
         )
         
-        # RAG: gpt-4o-mini (fast for simple queries)
+        # RAG: gpt-4.1-mini (fast for simple queries)
         self.rag_llm = ChatOpenAI(
             model=config.RAG_LLM_MODEL,
-            temperature=config.RAG_LLM_TEMPERATURE,
-            max_tokens=config.RAG_LLM_MAX_TOKENS,
             api_key=config.OPENAI_API_KEY
         )
         
-        # Reasoning: gpt-4o (or o1 if you have access)
+        # Reasoning: gpt-5
         self.reasoning_llm = ChatOpenAI(
             model=config.REASONING_LLM_MODEL,
-            temperature=config.REASONING_LLM_TEMPERATURE,
             api_key=config.OPENAI_API_KEY
         )
         
         # Fallback: Gemini
         self.fallback_llm = ChatGoogleGenerativeAI(
             model=config.FALLBACK_LLM_MODEL,
-            temperature=config.FALLBACK_LLM_TEMPERATURE,
-            max_output_tokens=config.FALLBACK_LLM_MAX_TOKENS,
             google_api_key=config.GOOGLE_API_KEY
         )
     

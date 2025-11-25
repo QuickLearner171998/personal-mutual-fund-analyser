@@ -40,9 +40,7 @@ class PerplexityClient:
                         "role": "user",
                         "content": query
                     }
-                ],
-                "temperature": config.PERPLEXITY_TEMPERATURE,
-                "max_tokens": config.PERPLEXITY_MAX_TOKENS
+                ]
             }
             
             response = requests.post(

@@ -216,3 +216,6 @@ data/cas_uploads/*
 *.pkl
 *.pdf
 tasks*
+*.json
+*.xlsx
+

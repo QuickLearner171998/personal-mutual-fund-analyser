@@ -18,33 +18,20 @@ PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
 # LLM MODEL CONFIGURATION
 # =============================================================================
 
-# Primary LLM (for analysis)
-# Available: "gpt-4o", "gpt-4o-mini", "gpt-4-turbo"
-# Note: o1 models require special API access
-PRIMARY_LLM_MODEL = os.getenv("PRIMARY_LLM_MODEL", "gpt-4o")
-PRIMARY_LLM_TEMPERATURE = float(os.getenv("PRIMARY_LLM_TEMPERATURE", "0"))
-PRIMARY_LLM_MAX_TOKENS = int(os.getenv("PRIMARY_LLM_MAX_TOKENS", "4096"))
+# Primary LLM (for general tasks with reasoning)
+PRIMARY_LLM_MODEL = os.getenv("PRIMARY_LLM_MODEL", "gpt-5")
 
 # Fast LLM for RAG and quick queries
-# Available: "gpt-4o-mini", "gpt-4o"
-RAG_LLM_MODEL = os.getenv("RAG_LLM_MODEL", "gpt-4o-mini")
-RAG_LLM_TEMPERATURE = float(os.getenv("RAG_LLM_TEMPERATURE", "0"))
-RAG_LLM_MAX_TOKENS = int(os.getenv("RAG_LLM_MAX_TOKENS", "2000"))
+RAG_LLM_MODEL = os.getenv("RAG_LLM_MODEL", "gpt-4.1-mini")
 
-# Advanced reasoning LLM (if you have o1 access, otherwise same as primary)
-REASONING_LLM_MODEL = os.getenv("REASONING_LLM_MODEL", "gpt-4o")
-REASONING_LLM_TEMPERATURE = float(os.getenv("REASONING_LLM_TEMPERATURE", "0"))
+# Advanced reasoning LLM (for complex thinking)
+REASONING_LLM_MODEL = os.getenv("REASONING_LLM_MODEL", "gpt-5")
 
 # Fallback LLM (when primary fails)
 FALLBACK_LLM_MODEL = os.getenv("FALLBACK_LLM_MODEL", "gemini-2.0-flash-exp")
-FALLBACK_LLM_TEMPERATURE = float(os.getenv("FALLBACK_LLM_TEMPERATURE", "0"))
-FALLBACK_LLM_MAX_TOKENS = int(os.getenv("FALLBACK_LLM_MAX_TOKENS", "2000"))
 
 # Perplexity model (market research)
-# Options: "sonar", "sonar-pro", "llama-3.1-sonar-large-128k-online"
 PERPLEXITY_MODEL = os.getenv("PERPLEXITY_MODEL", "sonar-pro")
-PERPLEXITY_TEMPERATURE = float(os.getenv("PERPLEXITY_TEMPERATURE", "0.2"))
-PERPLEXITY_MAX_TOKENS = int(os.getenv("PERPLEXITY_MAX_TOKENS", "1000"))
 
 # =============================================================================
 # EMBEDDING CONFIGURATION
@@ -55,7 +42,7 @@ EMBEDDING_DIMENSION = int(os.getenv("EMBEDDING_DIMENSION", "1536"))
 # =============================================================================
 # VECTOR STORE CONFIGURATION
 # =============================================================================
-VECTOR_STORE_K = int(os.getenv("VECTOR_STORE_K", "5"))  # Number of results to retrieve
+VECTOR_STORE_K = int(os.getenv("VECTOR_STORE_K", "10"))  # Number of results to retrieve
 VECTOR_STORE_PATH = os.getenv("VECTOR_STORE_PATH", "./data/vector_store")
 
 # =============================================================================
