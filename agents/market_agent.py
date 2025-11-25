@@ -23,7 +23,9 @@ class MarketAgent:
         perplexity_result = self.perplexity.search(query)
         
         if not perplexity_result['success']:
-            return f"⚠️ Unable to fetch real-time data: {perplexity_result['answer']}"
+            error_msg = perplexity_result.get('answer', 'Unknown error')
+            print(f"❌ Perplexity Search Failed: {error_msg}")
+            return f"⚠️ Unable to fetch real-time data. Error: {error_msg}\n\nPlease check your Perplexity API key and model configuration."
         
         # Build structured response
         answer = perplexity_result['answer']

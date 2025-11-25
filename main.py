@@ -63,6 +63,20 @@ def test_agents():
         print(f"Query: {query}")
         response = answer_query(query, stream=False)
         print(f"Response: {response[:200]}...")
+        
+        # Test Portfolio Query (to verify invoke_llm fix)
+        query_portfolio = "What is my total investment?"
+        print(f"\nQuery: {query_portfolio}")
+        response_portfolio = answer_query(query_portfolio, stream=False)
+        print(f"Response: {response_portfolio[:200]}...")
+        
+        # Test Market Query (Perplexity)
+        print("\nTesting Market Agent (Perplexity)...")
+        from agents.market_agent import MarketAgent
+        market_agent = MarketAgent()
+        market_response = market_agent.research("Current NAV of SBI Small Cap Fund")
+        print(f"Market Response: {market_response[:200]}...")
+        
         print("✓ Agents working")
     except Exception as e:
         print(f"✗ Agent Error: {str(e)}")
@@ -102,9 +116,29 @@ def main():
     test_calculations()
     test_llm()
     test_agents()
+    test_comprehensive()
     
     print("="*60)
     print("All tests completed!")
+
+def test_comprehensive():
+    """Run comprehensive unit tests"""
+    print("Running comprehensive tests...")
+    import unittest
+    from tests.test_comprehensive import TestPortfolioAnalysis
+    
+    # Load tests
+    suite = unittest.TestLoader().loadTestsFromTestCase(TestPortfolioAnalysis)
+    
+    # Run tests
+    result = unittest.TextTestRunner(verbosity=2).run(suite)
+    
+    if not result.wasSuccessful():
+        print("❌ Comprehensive tests failed!")
+        sys.exit(1)
+    else:
+        print("✓ Comprehensive tests passed!")
+    print()
     print("="*60)
     print()
     print("To run the full app:")

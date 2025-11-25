@@ -48,7 +48,7 @@ with st.sidebar:
     
     page = st.radio(
         "Navigation",
-        ["📊 Dashboard", "💰 SIP Analysis", "📝 Transactions", "💬 AI Q&A", "📁 Upload CAS", "⚙️ Settings"],
+        ["📊 Dashboard", "💰 SIP Analysis", "💬 AI Q&A", "📁 Upload CAS", "⚙️ Settings"],
         label_visibility="collapsed"
     )
     
@@ -64,9 +64,7 @@ elif page == "💰 SIP Analysis":
     from ui.sip_dashboard import render_sip_dashboard
     render_sip_dashboard()
 
-elif page == "📝 Transactions":
-    from ui.transactions import render_transactions
-    render_transactions()
+
     
 elif page == "💬 AI Q&A":
     from ui.chat import render_chat

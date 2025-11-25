@@ -19,29 +19,61 @@ def render_sip_dashboard():
     # Filter SIP transactions
     sip_txns = [t for t in transactions if 'systematic' in t.get('description', '').lower() or 'sip' in t.get('description', '').lower()]
     
-    st.metric("Total SIP Transactions", len(sip_txns))
+    if not sip_txns:
+        st.warning("No SIP transactions found in your portfolio.")
+        return
+
+    # Identify Active SIPs (last txn within 45 days)
+    from datetime import datetime, timedelta
     
-    if sip_txns:
-        # Convert to DataFrame
-        df = pd.DataFrame(sip_txns)
-        
-        # Monthly SIP amount estimate
-        if 'amount' in df.columns:
-            avg_sip = df['amount'].median()
-            total_sip_invested = df['amount'].sum()
+    active_sips = []
+    inactive_sips = []
+    
+    # Group by scheme
+    sip_by_scheme = {}
+    for txn in sip_txns:
+        scheme = txn['scheme_name']
+        if scheme not in sip_by_scheme:
+            sip_by_scheme[scheme] = []
+        sip_by_scheme[scheme].append(txn)
+    
+    today = datetime.now().date()
+    cutoff_date = today - timedelta(days=45)
+    
+    for scheme, txns in sip_by_scheme.items():
+        # Sort by date
+        txns.sort(key=lambda x: datetime.strptime(x['date'], '%d-%b-%Y').date() if isinstance(x['date'], str) else x['date'], reverse=True)
+        last_txn = txns[0]
+        last_date = last_txn['date']
+        if isinstance(last_date, str):
+            last_date = datetime.strptime(last_date, '%d-%b-%Y').date()
             
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("Average SIP Amount", f"₹{avg_sip:,.0f}")
-            with col2:
-                st.metric("Total SIP Invested", f"₹{total_sip_invested:,.0f}")
+        is_active = last_date >= cutoff_date
         
-        # SIP Timeline
-        st.subheader("📅 SIP Transaction History")
-        display_df = df[['date', 'description', 'amount', 'units']].copy()
-        display_df.columns = ['Date', 'Description', 'Amount', 'Units']
-        display_df['Amount'] = display_df['Amount'].apply(lambda x: f"₹{x:,.2f}")
-        display_df['Units'] = display_df['Units'].apply(lambda x: f"{x:.3f}")
+        sip_info = {
+            'scheme_name': scheme,
+            'amount': last_txn['amount'],
+            'last_date': last_date,
+            'total_invested': sum(t['amount'] for t in txns),
+            'txn_count': len(txns)
+        }
+        
+        if is_active:
+            active_sips.append(sip_info)
+        else:
+            inactive_sips.append(sip_info)
+            
+    st.metric("Active SIPs", len(active_sips))
+    
+    if active_sips:
+        st.subheader("✅ Active SIPs")
+        active_df = pd.DataFrame(active_sips)
+        
+        display_df = active_df[['scheme_name', 'amount', 'last_date', 'total_invested']].copy()
+        display_df.columns = ['Fund Name', 'SIP Amount', 'Last Date', 'Total Invested via SIP']
+        display_df['SIP Amount'] = display_df['SIP Amount'].apply(lambda x: f"₹{x:,.0f}")
+        display_df['Total Invested via SIP'] = display_df['Total Invested via SIP'].apply(lambda x: f"₹{x:,.0f}")
+        
         st.dataframe(display_df, use_container_width=True, hide_index=True)
     else:
-        st.warning("No SIP transactions found in your portfolio.")
+        st.info("No active SIPs found (last 45 days).")

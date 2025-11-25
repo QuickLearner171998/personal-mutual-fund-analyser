@@ -44,14 +44,14 @@ def render_cas_upload():
                     f.write(uploaded_file.getvalue())
                 
                 # Parse CAS using ENHANCED parser (extracts ALL transactions)
-                st.info("Step 1/4: Parsing CAS PDF...")
+                st.info("Step 1/5: Parsing CAS PDF...")
                 from cas_import.enhanced_cas_parser import EnhancedCASParser
                 
                 parser = EnhancedCASParser(temp_path)
                 cas_data = parser.parse()
                 
                 # Extract data
-                st.info("Step 2/4: Extracting holdings and transactions...")
+                st.info("Step 2/5: Extracting holdings and transactions...")
                 holdings = cas_data.get('holdings', [])
                 transactions = cas_data.get('transactions', [])
                 summary_data = cas_data.get('summary', {})
@@ -60,12 +60,12 @@ def render_cas_upload():
                 st.success(f"✓ Found {len(holdings)} holdings and {len(transactions)} transactions")
                 
                 
-                # Enhanced parser already calculated everything!
-                st.info("Step 3/4: Validating data...")
+                # Calculate portfolio metrics (already done by parser)
+                st.info("Step 3/5: Validating data...")
                 enriched_holdings = holdings
                 
                 # Calculate portfolio metrics (already done by parser)
-                st.info("Step 4/4: Preparing portfolio data...")
+                st.info("Step 4/5: Preparing portfolio data...")
                 total_value = summary_data.get('total_value', 0)
                 total_invested = summary_data.get('total_invested', 0)
                 total_gain = summary_data.get('total_gain', 0)
@@ -90,6 +90,10 @@ def render_cas_upload():
                     'statement_period_to': statement_period.get('to')
                 }
                 
+                # Calculate XIRR
+                from calculations.returns import calculate_xirr
+                portfolio_data['xirr'] = calculate_xirr(transactions, total_value)
+                
                 # Save to JSON file (NO MONGODB)
                 store = PortfolioStore()
                 store.save_portfolio(portfolio_data)
@@ -98,6 +102,15 @@ def render_cas_upload():
                 # Save historical snapshot
                 from utils.history_tracker import tracker
                 tracker.save_snapshot()
+                
+                # Backfill historical data for period returns
+                st.info("Step 4/5: Backfilling historical data...")
+                try:
+                    tracker.backfill_history(transactions, enriched_holdings)
+                    st.success("✓ Historical data backfilled successfully!")
+                except Exception as e:
+                    st.warning(f"⚠️ Could not backfill history: {str(e)}")
+                    print(f"Backfill error: {e}")
                 
                 # Index in FAISS for RAG
                 try:

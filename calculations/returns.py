@@ -6,12 +6,13 @@ from datetime import datetime, date
 from typing import List, Dict
 import pandas as pd
 
-def calculate_xirr(transactions: List[Dict]) -> float:
+def calculate_xirr(transactions: List[Dict], current_value: float = 0.0) -> float:
     """
     Calculate XIRR (Extended Internal Rate of Return) for portfolio
     
     Args:
         transactions: List of transactions with 'date', 'amount', 'type'
+        current_value: Current total value of the portfolio
         
     Returns:
         XIRR as percentage (e.g., 12.5 for 12.5%)
@@ -35,10 +36,14 @@ def calculate_xirr(transactions: List[Dict]) -> float:
                 cash_flows.append(abs(txn['amount']))
         
         # Add current portfolio value as final positive cash flow
-        # This would be passed separately or calculated from current holdings
+        if current_value > 0:
+            dates.append(date.today())
+            cash_flows.append(current_value)
         
         if len(dates) > 1 and len(cash_flows) > 1:
             xirr_value = pyxirr.xirr(dates, cash_flows)
+            if xirr_value is None:
+                return 0.0
             return round(xirr_value * 100, 2)  # Convert to percentage
         
         return 0.0
@@ -106,7 +111,7 @@ def calculate_fund_wise_cagr(holdings: List[Dict], transactions: List[Dict]) -> 
         
         # Get transactions for this fund
         fund_txns = [t for t in transactions 
-                     if t['scheme_name'] == scheme_name and t['folio_number'] == folio]
+                     if t.get('scheme_name') == scheme_name and t.get('folio_number') == folio]
         
         if not fund_txns:
             continue

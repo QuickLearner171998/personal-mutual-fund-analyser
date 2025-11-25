@@ -103,9 +103,9 @@ class LLMWrapper:
 llm = LLMWrapper()
 
 
-def invoke_llm(messages: List[Dict], use_reasoning: bool = False, stream: bool = False):
+def invoke_llm(messages: List[Dict], use_reasoning: bool = False, use_rag: bool = False, stream: bool = False):
     """Convenience function for LLM calls"""
-    return llm.invoke(messages, use_reasoning, stream)
+    return llm.invoke(messages, use_reasoning, use_rag, stream)
 
 
 # Test

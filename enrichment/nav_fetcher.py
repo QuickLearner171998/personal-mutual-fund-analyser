@@ -2,7 +2,7 @@
 NAV Fetcher - Get latest NAV from MF API
 """
 import requests
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 from datetime import datetime, timedelta
 import json
 
@@ -12,6 +12,21 @@ class NAVFetcher:
     def __init__(self):
         self.cache = {}  # Simple in-memory cache
         
+    def fetch_nav_history(self, scheme_code: str) -> List[Dict]:
+        """Fetch full NAV history for a scheme code"""
+        try:
+            url = f"{self.BASE_URL}/{scheme_code}"
+            response = requests.get(url, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data and 'data' in data:
+                    return data['data']
+        except Exception as e:
+            print(f"Error fetching NAV history for {scheme_code}: {str(e)}")
+        
+        return []
+
     def fetch_nav(self, scheme_code: str) -> Optional[Dict]:
         """Fetch latest NAV for a scheme code"""
         try:

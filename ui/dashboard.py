@@ -19,6 +19,7 @@ def render_dashboard():
     try:
         store = PortfolioStore()
         portfolio = store.get_portfolio()
+        transactions = store.get_transactions()
     except Exception as e:
         st.error(f"❌ Error loading portfolio: {str(e)}")
         st.info("Please try uploading your CAS PDF again.")
@@ -173,23 +174,35 @@ def render_dashboard():
     # Fund-wise CAGR Chart
     st.subheader("📊 Fund-wise Performance (CAGR)")
     
-    if not holdings_df.empty and 'gain_loss_pct' in holdings_df.columns:
-        # Use gain % as proxy for CAGR (simplified)
-        top_10_cagr = holdings_df.nlargest(10, 'gain_loss_pct')[['scheme_name', 'gain_loss_pct']]
+    from calculations.returns import calculate_fund_wise_cagr
+    
+    if not holdings_df.empty and transactions:
+        fund_cagr_data = calculate_fund_wise_cagr(portfolio.get('holdings', []), transactions)
         
-        fig_cagr = go.Figure(go.Bar(
-            x=top_10_cagr['gain_loss_pct'],
-            y=top_10_cagr['scheme_name'].apply(lambda x: x[:30]),
-            orientation='h',
-            marker=dict(color=top_10_cagr['gain_loss_pct'], colorscale='RdYlGn')
-        ))
-        fig_cagr.update_layout(
-            xaxis_title="Return %",
-            yaxis_title="",
-            height=400,
-            showlegend=False
-        )
-        st.plotly_chart(fig_cagr, use_container_width=True)
+        if fund_cagr_data:
+            cagr_df = pd.DataFrame(fund_cagr_data)
+            # Sort by CAGR
+            cagr_df = cagr_df.sort_values('cagr', ascending=True).tail(10)
+            
+            fig_cagr = go.Figure(go.Bar(
+                x=cagr_df['cagr'],
+                y=cagr_df['scheme_name'].apply(lambda x: x[:30]),
+                orientation='h',
+                marker=dict(color=cagr_df['cagr'], colorscale='RdYlGn'),
+                text=cagr_df['cagr'].apply(lambda x: f"{x:.1f}%"),
+                textposition='auto'
+            ))
+            fig_cagr.update_layout(
+                xaxis_title="CAGR %",
+                yaxis_title="",
+                height=400,
+                showlegend=False
+            )
+            st.plotly_chart(fig_cagr, use_container_width=True)
+        else:
+            st.info("Not enough data to calculate CAGR (needs >1 year history)")
+    else:
+        st.info("Upload CAS to see fund-wise performance")
     
     st.markdown("---")
     

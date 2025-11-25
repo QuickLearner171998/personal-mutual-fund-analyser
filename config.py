@@ -42,7 +42,7 @@ FALLBACK_LLM_MAX_TOKENS = int(os.getenv("FALLBACK_LLM_MAX_TOKENS", "2000"))
 
 # Perplexity model (market research)
 # Options: "sonar", "sonar-pro", "llama-3.1-sonar-large-128k-online"
-PERPLEXITY_MODEL = os.getenv("PERPLEXITY_MODEL", "llama-3.1-sonar-large-128k-online")
+PERPLEXITY_MODEL = os.getenv("PERPLEXITY_MODEL", "sonar-pro")
 PERPLEXITY_TEMPERATURE = float(os.getenv("PERPLEXITY_TEMPERATURE", "0.2"))
 PERPLEXITY_MAX_TOKENS = int(os.getenv("PERPLEXITY_MAX_TOKENS", "1000"))
 
