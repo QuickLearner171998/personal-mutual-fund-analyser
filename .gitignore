@@ -208,12 +208,11 @@ __marimo__/
 
 venv/
 .DS_Store
-data/temp_*
+data/*
 data/cas_uploads/*
 !data/cas_uploads/.gitkeep
 .streamlit/
-*.json
 *.index
 *.pkl
-*.txt
 *.pdf
+tasks*

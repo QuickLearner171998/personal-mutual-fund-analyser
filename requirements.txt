@@ -1,0 +1,31 @@
+# MF Portfolio Bot - Requirements
+
+# Core dependencies
+casparser
+pypdf
+
+# Vector DB (for RAG)
+faiss-cpu
+
+# Data & Calculations
+pandas
+numpy
+pyxirr
+
+# LLM & Agents
+langchain
+langchain-openai
+langchain-google-genai
+langgraph
+openai
+
+# External APIs
+requests
+
+# Frontend
+streamlit
+plotly
+
+# Utils
+python-dotenv
+pydantic
