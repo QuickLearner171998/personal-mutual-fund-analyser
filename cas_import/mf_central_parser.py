@@ -174,68 +174,84 @@ class MFCentralParser:
         return aggregated_holdings, aggregation_map
     
     def identify_active_sips(self, transactions: List[Dict]) -> List[Dict]:
-        """
-        Identify active SIPs from transaction patterns
-        Returns list of active SIP details
-        """
-        # Group SIP transactions by scheme and folio
-        sip_groups = defaultdict(list)
+        """Identify active SIPs from transaction patterns"""
+        
+        # Group SIP transactions by scheme + folio (unique combination)
+        sip_groups = {}
         
         for txn in transactions:
-            if txn['transaction_type'] == 'sip' and txn.get('trade_date'):
-                key = (txn['scheme_name'], txn['folio_number'])
-                sip_groups[key].append(txn)
+            if txn['transaction_type'] == 'sip':
+                # Use scheme + folio as unique key to avoid duplicates
+                key = f"{txn['scheme_name']}||{txn['folio_number']}"
+                
+                if key not in sip_groups:
+                    sip_groups[key] = {
+                        'scheme_name': txn['scheme_name'],
+                        'folio_number': txn['folio_number'],
+                        'transactions': []
+                    }
+                
+                sip_groups[key]['transactions'].append(txn)
         
+        # Analyze each SIP group
         active_sips = []
         
-        for (scheme_name, folio), sip_txns in sip_groups.items():
-            if not sip_txns:
+        for key, group in sip_groups.items():
+            txns = group['transactions']
+            if not txns:
                 continue
             
-            # Filter out any with None dates
-            sip_txns = [t for t in sip_txns if t.get('trade_date')]
-            
-            if not sip_txns:
+            # Filter out None dates and sort
+            valid_txns = [t for t in txns if t.get('trade_date') is not None]
+            if not valid_txns:
                 continue
+                
+            valid_txns.sort(key=lambda x: x['trade_date'])
             
-            # Sort by date
-            sip_txns.sort(key=lambda x: x['trade_date'])
+            # Get last transaction date
+            last_txn = valid_txns[-1]
+            last_date = last_txn['trade_date']
             
-            # Get last SIP transaction
-            last_sip = sip_txns[-1]
+            # Consider active if last SIP was within 60 days
+            cutoff_date = date.today() - timedelta(days=60)
             
-            # Check if SIP is active (last transaction within 60 days)
-            days_since_last = (date.today() - last_sip['trade_date']).days
-            
-            if days_since_last <= 60:  # Consider active if last SIP within 2 months
+            if last_date >= cutoff_date:
                 # Calculate frequency
-                frequency = self._calculate_sip_frequency(sip_txns)
+                amounts = [abs(float(t['amount'])) for t in valid_txns if t.get('amount')]
+                avg_amount = sum(amounts) / len(amounts) if amounts else 0
                 
-                # Calculate next installment date
-                next_date = self._calculate_next_sip_date(
-                    last_sip['trade_date'], 
-                    frequency
-                )
+                # Determine frequency from transaction intervals
+                if len(valid_txns) >= 2:
+                    intervals = []
+                    for i in range(1, min(len(valid_txns), 6)):
+                        delta = (valid_txns[i]['trade_date'] - valid_txns[i-1]['trade_date']).days
+                        intervals.append(delta)
+                    
+                    avg_interval = sum(intervals) / len(intervals) if intervals else 30
+                    
+                    if avg_interval < 10:
+                        frequency = 'Weekly'
+                    elif avg_interval < 20:
+                        frequency = 'Bi-weekly'
+                    elif avg_interval < 35:
+                        frequency = 'Monthly'
+                    elif avg_interval < 95:
+                        frequency = 'Quarterly'
+                    else:
+                        frequency = 'Yearly'
+                else:
+                    frequency = 'Monthly'  # Default
                 
-                # Get most common SIP amount
-                amounts = [txn['amount'] for txn in sip_txns]
-                sip_amount = max(set(amounts), key=amounts.count)
-                
-                sip_detail = {
-                    'scheme_name': scheme_name,
-                    'folio_number': folio,
-                    'sip_amount': abs(sip_amount),
+                active_sips.append({
+                    'scheme_name': group['scheme_name'],
+                    'folio_number': group['folio_number'],
+                    'sip_amount': round(avg_amount, 2),
                     'frequency': frequency,
-                    'start_date': sip_txns[0]['trade_date'],
-                    'last_installment_date': last_sip['trade_date'],
-                    'next_installment_date': next_date,
-                    'total_installments': len(sip_txns),
-                    'is_active': True,
-                    'broker': last_sip['broker'],
-                    'total_invested': sum(abs(txn['amount']) for txn in sip_txns)
-                }
-                
-                active_sips.append(sip_detail)
+                    'last_installment_date': last_date,
+                    'total_installments': len(valid_txns),
+                    'total_invested': sum(amounts),
+                    'broker': last_txn.get('broker', 'Unknown')
+                })
         
         return active_sips
     

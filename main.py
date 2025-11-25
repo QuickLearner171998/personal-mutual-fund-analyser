@@ -1,23 +1,87 @@
 #!/usr/bin/env python3
 """
 Main test runner for MF Portfolio Analyzer
-Tests MF Central data parsing and processing
+Tests all components and runs business logic without UI
 """
 import sys
-import json
 from pathlib import Path
 
 # Add current directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
+from core.portfolio_processor import (
+    load_mf_central_files,
+    validate_mf_central_data,
+    process_mf_central_data,
+    get_portfolio_summary,
+    get_transaction_summary,
+    load_portfolio_from_db,
+    check_sample_files_exist
+)
+
+
+def test_imports():
+    """Test all critical imports"""
+    print("=" * 80)
+    print("IMPORT TEST")
+    print("=" * 80)
+    
+    try:
+        # Core imports
+        print("\n1. Testing core imports...")
+        import config
+        from database.json_store import PortfolioStore
+        from cas_import.mf_central_parser import MFCentralParser
+        from calculations.returns import calculate_cagr, calculate_allocation
+        print("   ✓ Core imports successful")
+        
+        # UI imports
+        print("\n2. Testing UI imports...")
+        try:
+            from ui.dashboard import render_dashboard
+            from ui.sip_analytics import render_sip_dashboard
+            from ui.cas_upload import render_upload_page
+            from ui.chat import render_chat
+            print("   ✓ UI imports successful")
+        except ImportError as e:
+            print(f"   ⚠️  UI import warning: {str(e)}")
+            print("   (This is OK if Streamlit is not installed)")
+        
+        # Agent imports
+        print("\n3. Testing agent imports...")
+        from agents.coordinator import IntentClassifier
+        from agents.portfolio_agent import PortfolioAgent
+        from llm.llm_wrapper import invoke_llm
+        print("   ✓ Agent imports successful")
+        
+        # Vector DB imports
+        print("\n4. Testing vector DB imports...")
+        from vector_db.portfolio_indexer import index_portfolio_data
+        from vector_db.faiss_store import LocalVectorStore
+        print("   ✓ Vector DB imports successful")
+        
+        return True
+        
+    except Exception as e:
+        print(f"\n✗ Import Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return False
+
 
 def test_mf_central_parser():
     """Test MF Central parser with sample data"""
-    print("=" * 80)
+    print("\n" + "=" * 80)
     print("MF CENTRAL PARSER TEST")
     print("=" * 80)
     
-    from cas_import.mf_central_parser import MFCentralParser
+    # Check if sample files exist
+    files_exist, missing = check_sample_files_exist()
+    
+    if not files_exist:
+        print(f"\n⚠️  Sample data files not found: {', '.join(missing)}")
+        print("Please upload MF Central files first.")
+        return False
     
     # File paths
     base_dir = Path(__file__).parent
@@ -25,121 +89,71 @@ def test_mf_central_parser():
     transaction_path = base_dir / "CCJN4KTLB310840997771IMBAS199068013/AS199068013.json"
     detailed_path = base_dir / "70910727520211641ZF683740997FF11IMBPF199067986.json"
     
-    # Check if files exist
-    if not all([consolidated_path.exists(), transaction_path.exists(), detailed_path.exists()]):
-        print("\n⚠️  Sample data files not found. Please upload MF Central files first.")
-        print("\nExpected files:")
-        print(f"  1. {consolidated_path}")
-        print(f"  2. {transaction_path}")
-        print(f"  3. {detailed_path}")
-        return False
-    
-    # Load files
-    print("\n1. Loading JSON files...")
-    
-    with open(consolidated_path, 'r') as f:
-        consolidated_data = json.load(f)
-    print(f"   ✓ Loaded consolidated portfolio: {len(consolidated_data['dtTrxnResult'])} entries")
-    
-    with open(transaction_path, 'r') as f:
-        transaction_data = json.load(f)
-    print(f"   ✓ Loaded transactions: {len(transaction_data['dtTrxnResult'])} entries")
-    
-    with open(detailed_path, 'r') as f:
-        detailed_data = json.load(f)
-    print(f"   ✓ Loaded detailed report: {len(detailed_data)} entries")
-    
-    # Initialize parser
-    print("\n2. Parsing data...")
-    parser = MFCentralParser()
-    
     try:
-        portfolio_data = parser.build_portfolio_data(
+        # Load files
+        print("\n1. Loading JSON files...")
+        consolidated_data, transaction_data, detailed_data = load_mf_central_files(
+            consolidated_path,
+            transaction_path,
+            detailed_path
+        )
+        print(f"   ✓ Loaded consolidated portfolio: {len(consolidated_data['dtTrxnResult'])} entries")
+        print(f"   ✓ Loaded transactions: {len(transaction_data['dtTrxnResult'])} entries")
+        print(f"   ✓ Loaded detailed report: {len(detailed_data)} entries")
+        
+        # Validate
+        print("\n2. Validating data...")
+        is_valid, error = validate_mf_central_data(consolidated_data, transaction_data, detailed_data)
+        if not is_valid:
+            print(f"   ✗ Validation error: {error}")
+            return False
+        print("   ✓ Data validation successful")
+        
+        # Process
+        print("\n3. Processing data...")
+        portfolio_data, transactions = process_mf_central_data(
             consolidated_data,
             transaction_data,
-            detailed_data
+            detailed_data,
+            save_to_db=True,
+            index_for_qa=True
         )
-        print("   ✓ Portfolio data built successfully")
+        print("   ✓ Data processing successful")
+        
+        # Display summary
+        print("\n" + "=" * 80)
+        print("PORTFOLIO SUMMARY")
+        print("=" * 80)
+        
+        summary = get_portfolio_summary(portfolio_data)
+        print(f"\nInvestor: {summary['investor_name']}")
+        print(f"PAN: {summary['pan']}")
+        print(f"\nTotal Value: ₹{summary['total_value']:,.2f}")
+        print(f"Total Invested: ₹{summary['total_invested']:,.2f}")
+        print(f"Total Gain: ₹{summary['total_gain']:,.2f} ({summary['total_gain_percent']:.2f}%)")
+        print(f"Portfolio XIRR: {summary['xirr']:.2f}%")
+        print(f"\nFunds: {summary['num_funds']}")
+        print(f"Aggregated Funds: {summary['num_aggregated_funds']}")
+        print(f"Active SIPs: {summary['num_active_sips']}")
+        print(f"Brokers: {summary['num_brokers']}")
+        
+        # Transaction summary
+        txn_summary = get_transaction_summary(transactions)
+        print(f"\nTotal Transactions: {txn_summary['total']}")
+        for txn_type, count in txn_summary['by_type'].items():
+            print(f"  {txn_type}: {count}")
+        
+        print("\n" + "=" * 80)
+        print("✅ TEST COMPLETED SUCCESSFULLY")
+        print("=" * 80)
+        
+        return True
+        
     except Exception as e:
-        print(f"   ✗ Error: {str(e)}")
+        print(f"\n✗ Error: {str(e)}")
         import traceback
         traceback.print_exc()
         return False
-    
-    # Display summary
-    print("\n" + "=" * 80)
-    print("PORTFOLIO SUMMARY")
-    print("=" * 80)
-    
-    print(f"\nInvestor: {portfolio_data['investor_name']}")
-    print(f"PAN: {portfolio_data['pan']}")
-    print(f"\nTotal Value: ₹{portfolio_data['total_value']:,.2f}")
-    print(f"Total Invested: ₹{portfolio_data['total_invested']:,.2f}")
-    print(f"Total Gain: ₹{portfolio_data['total_gain']:,.2f} ({portfolio_data['total_gain_percent']:.2f}%)")
-    print(f"Portfolio XIRR: {portfolio_data['xirr']:.2f}%")
-    
-    print(f"\nFunds: {portfolio_data['num_funds']}")
-    print(f"Aggregated Funds: {portfolio_data['num_aggregated_funds']}")
-    print(f"Active SIPs: {portfolio_data['num_active_sips']}")
-    print(f"Brokers: {portfolio_data['num_brokers']}")
-    
-    # Show active SIPs
-    if portfolio_data['active_sips']:
-        print("\n" + "-" * 80)
-        print(f"ACTIVE SIPs ({len(portfolio_data['active_sips'])})")
-        print("-" * 80)
-        for sip in portfolio_data['active_sips'][:5]:  # Show first 5
-            print(f"\n{sip['scheme_name'][:60]}")
-            print(f"  Amount: ₹{sip['sip_amount']:,.2f} ({sip['frequency']})")
-            print(f"  Total Invested: ₹{sip['total_invested']:,.2f}")
-            print(f"  Broker: {sip['broker']}")
-    
-    # Show brokers
-    if portfolio_data['broker_info']:
-        print("\n" + "-" * 80)
-        print(f"BROKERS ({len(portfolio_data['broker_info'])})")
-        print("-" * 80)
-        for broker, info in list(portfolio_data['broker_info'].items())[:5]:
-            print(f"\n{broker}")
-            print(f"  Total Invested: ₹{info['total_invested']:,.2f}")
-            print(f"  Schemes: {info['scheme_count']}")
-    
-    # Show top 5 holdings
-    print("\n" + "-" * 80)
-    print("TOP 5 HOLDINGS BY VALUE")
-    print("-" * 80)
-    sorted_holdings = sorted(
-        portfolio_data['holdings'], 
-        key=lambda x: x['current_value'], 
-        reverse=True
-    )[:5]
-    
-    for i, holding in enumerate(sorted_holdings, 1):
-        print(f"\n{i}. {holding['scheme_name'][:60]}")
-        print(f"   Value: ₹{holding['current_value']:,.2f} | XIRR: {holding['xirr']:.2f}%")
-    
-    # Save to database
-    print("\n" + "=" * 80)
-    print("SAVING TO DATABASE")
-    print("=" * 80)
-    
-    from database.json_store import PortfolioStore
-    
-    store = PortfolioStore()
-    store.save_complete_data(
-        portfolio=portfolio_data,
-        transactions=parser.transaction_data,
-        sips=portfolio_data.get('active_sips', []),
-        broker_info=portfolio_data.get('broker_info', {}),
-        aggregation_map=portfolio_data.get('aggregation_map', {})
-    )
-    print("\n✓ Portfolio data saved to ./data/")
-    
-    print("\n" + "=" * 80)
-    print("✅ TEST COMPLETED SUCCESSFULLY")
-    print("=" * 80)
-    
-    return True
 
 
 def test_config():
@@ -152,6 +166,7 @@ def test_config():
         import config
         print(f"\n✓ Primary LLM: {config.PRIMARY_LLM_MODEL}")
         print(f"✓ RAG LLM: {config.RAG_LLM_MODEL}")
+        print(f"✓ Reasoning LLM: {config.REASONING_LLM_MODEL}")
         print(f"✓ Data directory: {config.DATA_DIR}")
         return True
     except Exception as e:
@@ -166,17 +181,15 @@ def test_portfolio_store():
     print("=" * 80)
     
     try:
-        from database.json_store import PortfolioStore
-        
-        store = PortfolioStore()
-        portfolio = store.get_portfolio()
+        portfolio = load_portfolio_from_db()
         
         if portfolio:
+            summary = get_portfolio_summary(portfolio)
             print(f"\n✓ Portfolio loaded from storage")
-            print(f"  Total value: ₹{portfolio.get('total_value', 0):,.0f}")
+            print(f"  Total value: ₹{summary['total_value']:,.0f}")
             print(f"  Holdings: {len(portfolio.get('holdings', []))}")
-            print(f"  Active SIPs: {portfolio.get('num_active_sips', 0)}")
-            print(f"  Data source: {portfolio.get('data_source', 'Unknown')}")
+            print(f"  Active SIPs: {summary['num_active_sips']}")
+            print(f"  Data source: {summary['data_source']}")
             return True
         else:
             print("\n⚠️  No portfolio data in storage")
@@ -218,21 +231,28 @@ def test_calculations():
 def main():
     """Run all tests"""
     print("\n" + "=" * 80)
-    print("MF PORTFOLIO ANALYZER - TEST SUITE")
+    print("MF PORTFOLIO ANALYZER - COMPREHENSIVE TEST SUITE")
     print("=" * 80)
     
     results = []
     
-    # Test 1: Configuration
+    # Test 1: Imports (CRITICAL - must pass)
+    results.append(("Imports", test_imports()))
+    
+    if not results[0][1]:
+        print("\n❌ CRITICAL: Import test failed. Cannot continue.")
+        sys.exit(1)
+    
+    # Test 2: Configuration
     results.append(("Configuration", test_config()))
     
-    # Test 2: MF Central Parser
+    # Test 3: MF Central Parser
     results.append(("MF Central Parser", test_mf_central_parser()))
     
-    # Test 3: Portfolio Storage
+    # Test 4: Portfolio Storage
     results.append(("Portfolio Storage", test_portfolio_store()))
     
-    # Test 4: Calculations
+    # Test 5: Calculations
     results.append(("Calculations", test_calculations()))
     
     # Summary
@@ -257,10 +277,11 @@ def main():
         print("\nTo run the Streamlit app:")
         print("  streamlit run app.py")
         print("\nThe app will be available at: http://localhost:8501")
+        return 0
     else:
         print("\n⚠️  Some tests failed. Please check the errors above.")
-        sys.exit(1)
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

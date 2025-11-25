@@ -10,7 +10,12 @@ from datetime import datetime
 
 from cas_import.mf_central_parser import MFCentralParser
 from database.json_store import PortfolioStore
-from vector_db.portfolio_indexer import PortfolioIndexer
+
+# Import new processing function
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from ui.cas_upload_v2 import process_mf_central_files_v2
 
 
 def render_upload_page():
@@ -20,36 +25,36 @@ def render_upload_page():
     # Instructions
     with st.expander("📖 How to Download Files from MF Central", expanded=True):
         st.markdown("""
-        ### Step-by-Step Guide:
+        ### New Simplified Workflow (2 Files Only!)
         
-        1. **Visit MF Central**: Go to [mfcentral.com](https://mfcentral.com)
-        2. **Login**: Use your credentials to login
-        3. **Download Required Files**:
+        We now use **Excel + Transaction JSON** for complete portfolio analysis.
         
-        #### File 1: CONSOLIDATED PORTFOLIO STATEMENT
-        - Navigate to: **Portfolio → Consolidated Portfolio Statement**
-        - Click **Download** button
-        - You'll get a **ZIP file** (e.g., `CCJN4KTLB310840997771IMBAS199068013.zip`)
-        - **Extract the ZIP** and find the JSON file: `CurrentValuationAS*.json`
+        #### File 1: Excel Detailed Report ⭐ (PRIMARY SOURCE)
+        - Navigate to: **MF Central → Reports → Detailed Report**
+        - Select date range (recommend: All time or Last 3 years)
+        - Click **Download as Excel** button
+        - You'll get: `cas_detailed_report_YYYY_MM_DD_HHMMSS.xlsx`
+        - **This contains**: All holdings, current values, invested amounts, gains
         
-        #### File 2: TRANSACTION DETAILS STATEMENT
+        #### File 2: Transaction Details Statement (FOR SIPs & BROKERS)
         - Navigate to: **Transactions → Transaction Details Statement**
         - Select date range (recommend: All time)
         - Click **Download** button
-        - You'll get a **ZIP file** (same as above or separate)
-        - **Extract the ZIP** and find the JSON file: `AS*.json`
+        - You'll get a **ZIP file**
+        - **Extract the ZIP** and find: `AS*.json`
+        - **This contains**: Transaction history, SIP details, broker information
         
-        #### File 3: Detailed Report with XIRR
-        - Navigate to: **Reports → Detailed Report**
-        - This will show a table with XIRR values
-        - Look for **Download as JSON** option
-        - You'll get a JSON file like: `70910727520211641ZF683740997FF11IMBPF199067986.json`
+        ### Why Only 2 Files?
+        
+        ✅ **Excel** has the most current and complete holdings data (43 funds)  
+        ✅ **Transaction JSON** provides SIP patterns and broker details  
+        ❌ **Old workflow** required 3 JSON files (now simplified!)
         
         ### Important Notes:
-        - ✅ All files must be in **JSON format**
-        - ✅ Extract ZIP files before uploading
-        - ✅ File names may vary but structure remains same
-        - ✅ Upload all 3 files for complete analysis
+        - ✅ Excel is downloaded directly (no ZIP extraction needed)
+        - ✅ Transaction JSON must be extracted from ZIP
+        - ✅ Both files must be from the same time period
+        - ✅ Upload both files for complete analysis
         """)
     
     st.markdown("---")
@@ -60,48 +65,48 @@ def render_upload_page():
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.markdown("**1. Current Valuation**")
-        st.caption("CurrentValuation*.json")
-        consolidated_file = st.file_uploader(
-            "Upload Consolidated Portfolio",
-            type=['json'],
-            key="consolidated",
-            help="Extract from CONSOLIDATED PORTFOLIO STATEMENT zip"
+        st.markdown("**1. Excel Report** ⭐")
+        st.caption("cas_detailed_report*.xlsx")
+        excel_file = st.file_uploader(
+            "Upload Excel",
+            type=['xlsx'],
+            key="excel",
+            help="MF Central → Reports → Detailed Report (Excel)"
         )
     
     with col2:
-        st.markdown("**2. Transaction Details**")
+        st.markdown("**2. Transactions**")
         st.caption("AS*.json")
         transaction_file = st.file_uploader(
-            "Upload Transaction Details",
+            "Upload Transactions",
             type=['json'],
             key="transactions",
-            help="Extract from TRANSACTION DETAILS STATEMENT zip"
+            help="Extract from Transaction Details zip"
         )
     
     with col3:
-        st.markdown("**3. Detailed Report**")
+        st.markdown("**3. XIRR Data**")
         st.caption("*IMBPF*.json")
-        detailed_file = st.file_uploader(
-            "Upload Detailed Report",
+        xirr_file = st.file_uploader(
+            "Upload XIRR JSON",
             type=['json'],
-            key="detailed",
-            help="Detailed report with XIRR data"
+            key="xirr",
+            help="Detailed report JSON with XIRR"
         )
     
     st.markdown("---")
     
     # Process button
-    if consolidated_file and transaction_file and detailed_file:
+    if excel_file and transaction_file and xirr_file:
         if st.button("🚀 Process Files", type="primary", use_container_width=True):
-            process_mf_central_files(consolidated_file, transaction_file, detailed_file)
+            process_mf_central_files_v2(excel_file, transaction_file, xirr_file)
     else:
         st.info("👆 Please upload all 3 files to continue")
         
         # Show which files are uploaded
         status_col1, status_col2, status_col3 = st.columns(3)
         with status_col1:
-            if consolidated_file:
+            if excel_file:
                 st.success("✅ Uploaded")
             else:
                 st.warning("⏳ Pending")
@@ -111,7 +116,7 @@ def render_upload_page():
             else:
                 st.warning("⏳ Pending")
         with status_col3:
-            if detailed_file:
+            if xirr_file:
                 st.success("✅ Uploaded")
             else:
                 st.warning("⏳ Pending")
@@ -138,49 +143,30 @@ def process_mf_central_files(consolidated_file, transaction_file, detailed_file)
             status_text.text("Validating data structure...")
             progress_bar.progress(20)
             
-            validation_result = validate_json_structure(
-                consolidated_data, 
-                transaction_data, 
-                detailed_data
-            )
-            
-            if not validation_result['valid']:
-                st.error(f"❌ Validation Error: {validation_result['error']}")
-                return
-            
-            # Step 3: Parse data
-            status_text.text("Parsing portfolio data...")
-            progress_bar.progress(30)
-            
-            parser = MFCentralParser()
-            portfolio_data = parser.build_portfolio_data(
+            from core.portfolio_processor import validate_mf_central_data
+            is_valid, error = validate_mf_central_data(
                 consolidated_data,
                 transaction_data,
                 detailed_data
             )
             
-            # Step 4: Save to database
-            status_text.text("Saving to database...")
-            progress_bar.progress(60)
+            if not is_valid:
+                st.error(f"❌ Validation Error: {error}")
+                return
             
-            store = PortfolioStore()
-            store.save_complete_data(
-                portfolio=portfolio_data,
-                transactions=parser.transaction_data,
-                sips=portfolio_data.get('active_sips', []),
-                broker_info=portfolio_data.get('broker_info', {}),
-                aggregation_map=portfolio_data.get('aggregation_map', {})
+            # Step 3: Parse and save data
+            status_text.text("Parsing and saving portfolio data...")
+            progress_bar.progress(40)
+            
+            from core.portfolio_processor import process_mf_central_data, get_portfolio_summary, get_transaction_summary
+            
+            portfolio_data, transactions = process_mf_central_data(
+                consolidated_data,
+                transaction_data,
+                detailed_data,
+                save_to_db=True,
+                index_for_qa=True
             )
-            
-            # Step 5: Index for Q&A
-            status_text.text("Indexing for Q&A chatbot...")
-            progress_bar.progress(80)
-            
-            try:
-                indexer = PortfolioIndexer()
-                indexer.index_portfolio(portfolio_data, parser.transaction_data)
-            except Exception as e:
-                st.warning(f"⚠️ Q&A indexing skipped: {str(e)}")
             
             # Complete
             progress_bar.progress(100)
@@ -198,26 +184,26 @@ def process_mf_central_files(consolidated_file, transaction_file, detailed_file)
             with col1:
                 st.metric(
                     "Total Value",
-                    f"₹{portfolio_data['total_value']:,.2f}"
+                    f"₹{summary['total_value']:,.2f}"
                 )
             
             with col2:
                 st.metric(
                     "Total Invested",
-                    f"₹{portfolio_data['total_invested']:,.2f}"
+                    f"₹{summary['total_invested']:,.2f}"
                 )
             
             with col3:
                 st.metric(
                     "Total Gain",
-                    f"₹{portfolio_data['total_gain']:,.2f}",
-                    delta=f"{portfolio_data['total_gain_percent']:.2f}%"
+                    f"₹{summary['total_gain']:,.2f}",
+                    delta=f"{summary['total_gain_percent']:.2f}%"
                 )
             
             with col4:
                 st.metric(
                     "Portfolio XIRR",
-                    f"{portfolio_data.get('xirr', 0):.2f}%"
+                    f"{summary['xirr']:.2f}%"
                 )
             
             # Additional stats
@@ -226,44 +212,40 @@ def process_mf_central_files(consolidated_file, transaction_file, detailed_file)
             col1, col2, col3, col4 = st.columns(4)
             
             with col1:
-                st.info(f"**{portfolio_data['num_funds']}** Funds")
+                st.info(f"**{summary['num_funds']}** Funds")
             
             with col2:
-                st.info(f"**{portfolio_data['num_aggregated_funds']}** After Aggregation")
+                st.info(f"**{summary['num_aggregated_funds']}** After Aggregation")
             
             with col3:
-                st.info(f"**{portfolio_data['num_active_sips']}** Active SIPs")
+                st.info(f"**{summary['num_active_sips']}** Active SIPs")
             
             with col4:
-                st.info(f"**{portfolio_data['num_brokers']}** Brokers")
+                st.info(f"**{summary['num_brokers']}** Brokers")
             
             # Transaction summary
             st.markdown("---")
             st.subheader("📝 Transaction Summary")
             
-            txn_types = {}
-            for txn in parser.transaction_data:
-                txn_type = txn['transaction_type']
-                txn_types[txn_type] = txn_types.get(txn_type, 0) + 1
-            
             txn_col1, txn_col2, txn_col3 = st.columns(3)
             
             with txn_col1:
-                st.metric("Total Transactions", len(parser.transaction_data))
+                st.metric("Total Transactions", txn_summary['total'])
             
             with txn_col2:
-                st.metric("Purchase Transactions", txn_types.get('purchase', 0))
+                st.metric("Purchase Transactions", txn_summary['by_type'].get('purchase', 0))
             
             with txn_col3:
-                st.metric("SIP Transactions", txn_types.get('sip', 0))
+                st.metric("SIP Transactions", txn_summary['by_type'].get('sip', 0))
             
             # Broker summary
-            if portfolio_data.get('broker_info'):
+            broker_info = portfolio_data.get('broker_info', {})
+            if broker_info:
                 st.markdown("---")
                 st.subheader("🤝 Broker Summary")
                 
                 broker_data = []
-                for broker, info in portfolio_data['broker_info'].items():
+                for broker, info in broker_info.items():
                     broker_data.append({
                         'Broker': broker,
                         'Total Invested': f"₹{info['total_invested']:,.2f}",
@@ -281,47 +263,3 @@ def process_mf_central_files(consolidated_file, transaction_file, detailed_file)
     except Exception as e:
         st.error(f"❌ Error processing files: {str(e)}")
         st.exception(e)
-
-
-def validate_json_structure(consolidated_data, transaction_data, detailed_data):
-    """Validate JSON structure"""
-    
-    try:
-        # Check consolidated data
-        if 'dtTrxnResult' not in consolidated_data:
-            return {'valid': False, 'error': 'Consolidated file missing dtTrxnResult'}
-        
-        if not consolidated_data['dtTrxnResult']:
-            return {'valid': False, 'error': 'Consolidated file has no holdings'}
-        
-        # Check transaction data
-        if 'dtTrxnResult' not in transaction_data:
-            return {'valid': False, 'error': 'Transaction file missing dtTrxnResult'}
-        
-        # Check detailed data
-        if not isinstance(detailed_data, list):
-            return {'valid': False, 'error': 'Detailed report should be a list'}
-        
-        if not detailed_data:
-            return {'valid': False, 'error': 'Detailed report is empty'}
-        
-        # Check required fields in first entry
-        required_consolidated_fields = ['Scheme', 'Folio', 'Unit Balance', 'Current Value(Rs.)']
-        first_holding = consolidated_data['dtTrxnResult'][0]
-        
-        for field in required_consolidated_fields:
-            if field not in first_holding:
-                return {'valid': False, 'error': f'Missing field in consolidated data: {field}'}
-        
-        # Check detailed report fields
-        required_detailed_fields = ['Scheme', 'Folio', 'CurrentValue', 'Annualised XIRR']
-        first_detailed = detailed_data[0]
-        
-        for field in required_detailed_fields:
-            if field not in first_detailed:
-                return {'valid': False, 'error': f'Missing field in detailed report: {field}'}
-        
-        return {'valid': True}
-        
-    except Exception as e:
-        return {'valid': False, 'error': str(e)}

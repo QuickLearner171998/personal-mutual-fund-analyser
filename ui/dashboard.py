@@ -83,22 +83,47 @@ def render_dashboard():
     
     if not holdings_df.empty:
         # Prepare display dataframe
-        display_df = holdings_df[[
-            'scheme_name', 'amc', 'current_value', 'cost_value', 
-            'gain_loss', 'gain_loss_percent', 'xirr', 'broker'
-        ]].copy()
+        # Prepare display columns based on what's available
+        base_columns = ['scheme_name', 'amc', 'current_value', 'cost_value', 'gain_loss', 'gain_loss_percent']
+        optional_columns = []
         
-        display_df.columns = [
-            'Fund Name', 'AMC', 'Current Value', 'Invested', 
-            'Gain/Loss', 'Return %', 'XIRR %', 'Broker'
-        ]
+        # Add optional columns if they exist
+        if 'xirr' in holdings_df.columns:
+            optional_columns.append('xirr')
+        if 'broker' in holdings_df.columns:
+            optional_columns.append('broker')
+        if 'is_aggregated' in holdings_df.columns:
+            optional_columns.append('is_aggregated')
+        
+        display_columns = base_columns + [col for col in optional_columns if col in holdings_df.columns]
+        display_df = holdings_df[display_columns].copy()
+        
+        # Map internal column names to display names
+        column_name_map = {
+            'scheme_name': 'Fund Name',
+            'amc': 'AMC',
+            'current_value': 'Current Value',
+            'cost_value': 'Invested',
+            'gain_loss': 'Gain/Loss',
+            'gain_loss_percent': 'Return %',
+            'xirr': 'XIRR %',
+            'broker': 'Broker',
+            'is_aggregated': 'Aggregated' # Assuming 'is_aggregated' might be displayed
+        }
+        
+        display_df.columns = [column_name_map.get(col, col) for col in display_columns]
         
         # Format columns
         display_df['Current Value'] = display_df['Current Value'].apply(format_currency)
         display_df['Invested'] = display_df['Invested'].apply(format_currency)
         display_df['Gain/Loss'] = display_df['Gain/Loss'].apply(format_currency)
         display_df['Return %'] = display_df['Return %'].apply(lambda x: f"{x:.2f}%")
-        display_df['XIRR %'] = display_df['XIRR %'].apply(lambda x: f"{x:.2f}%")
+        
+        # Format optional columns if they exist
+        if 'XIRR %' in display_df.columns:
+            display_df['XIRR %'] = display_df['XIRR %'].apply(lambda x: f"{x:.2f}%" if pd.notna(x) and x != 0 else "-")
+        if 'Broker' in display_df.columns:
+            display_df['Broker'] = display_df['Broker'].fillna('Unknown')
         
         # Display with sorting
         st.dataframe(
@@ -193,21 +218,51 @@ def render_dashboard():
         
         # SIP Details Table
         st.markdown("#### SIP Details")
+        sip_df = pd.DataFrame(sips)
         
-        sip_display = sip_df[[
-            'scheme_name', 'sip_amount', 'frequency', 
-            'next_installment_date', 'total_installments', 'broker'
-        ]].copy()
-        
-        sip_display.columns = [
-            'Fund Name', 'SIP Amount', 'Frequency', 
-            'Next Installment', 'Installments', 'Broker'
-        ]
-        
-        sip_display['SIP Amount'] = sip_display['SIP Amount'].apply(format_currency)
-        sip_display['Next Installment'] = pd.to_datetime(sip_display['Next Installment']).dt.strftime('%d-%b-%Y')
-        
-        st.dataframe(sip_display, use_container_width=True, hide_index=True)
+        if not sip_df.empty:
+            # Prepare display columns based on what's available
+            base_sip_columns = ['scheme_name', 'sip_amount', 'frequency']
+            optional_sip_columns = []
+            
+            if 'last_installment_date' in sip_df.columns:
+                optional_sip_columns.append('last_installment_date')
+            if 'next_installment_date' in sip_df.columns:
+                optional_sip_columns.append('next_installment_date')
+            if 'total_installments' in sip_df.columns:
+                optional_sip_columns.append('total_installments')
+            if 'broker' in sip_df.columns:
+                optional_sip_columns.append('broker')
+            
+            # Filter for columns that actually exist in sip_df
+            display_sip_columns = [col for col in (base_sip_columns + optional_sip_columns) if col in sip_df.columns]
+            sip_display = sip_df[display_sip_columns].copy()
+            
+            # Rename columns
+            column_renames = {
+                'scheme_name': 'Fund Name',
+                'sip_amount': 'SIP Amount',
+                'frequency': 'Frequency',
+                'last_installment_date': 'Last Date',
+                'next_installment_date': 'Next Date',
+                'total_installments': 'Installments',
+                'broker': 'Broker'
+            }
+            sip_display.columns = [column_renames.get(col, col) for col in sip_display.columns]
+            
+            # Format SIP amount
+            if 'SIP Amount' in sip_display.columns:
+                sip_display['SIP Amount'] = sip_display['SIP Amount'].apply(
+                    lambda x: f"₹{x:,.0f}" if pd.notna(x) else "-"
+                )
+            if 'Next Date' in sip_display.columns:
+                sip_display['Next Date'] = pd.to_datetime(sip_display['Next Date'], errors='coerce').dt.strftime('%d-%b-%Y').fillna('N/A')
+            if 'Last Date' in sip_display.columns:
+                sip_display['Last Date'] = pd.to_datetime(sip_display['Last Date'], errors='coerce').dt.strftime('%d-%b-%Y').fillna('N/A')
+            
+            st.dataframe(sip_display, use_container_width=True, hide_index=True)
+        else:
+            st.info("No active SIPs found")
         
         st.markdown("---")
     
