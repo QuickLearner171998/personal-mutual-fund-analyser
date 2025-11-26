@@ -2,6 +2,118 @@
 
 {% block title %}AI Chat - MF Portfolio Analyzer{% endblock %}
 
+{% block extra_css %}
+<style>
+    /* Markdown styling for chat responses */
+    .markdown-content {
+        line-height: 1.6;
+    }
+    
+    .markdown-content h1,
+    .markdown-content h2,
+    .markdown-content h3 {
+        margin-top: 1.5rem;
+        margin-bottom: 0.75rem;
+        font-weight: 600;
+    }
+    
+    .markdown-content h1 {
+        font-size: 1.75rem;
+        border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+        padding-bottom: 0.5rem;
+    }
+    
+    .markdown-content h2 {
+        font-size: 1.5rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        padding-bottom: 0.4rem;
+    }
+    
+    .markdown-content h3 {
+        font-size: 1.25rem;
+    }
+    
+    .markdown-content table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 1rem 0;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    
+    .markdown-content th,
+    .markdown-content td {
+        padding: 0.75rem;
+        text-align: left;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .markdown-content th {
+        background: rgba(255, 255, 255, 0.1);
+        font-weight: 600;
+    }
+    
+    .markdown-content ul,
+    .markdown-content ol {
+        margin: 0.5rem 0;
+        padding-left: 1.5rem;
+    }
+    
+    .markdown-content li {
+        margin: 0.25rem 0;
+    }
+    
+    .markdown-content code {
+        background: rgba(0, 0, 0, 0.3);
+        padding: 0.2rem 0.4rem;
+        border-radius: 4px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.9em;
+    }
+    
+    .markdown-content pre {
+        background: rgba(0, 0, 0, 0.3);
+        padding: 1rem;
+        border-radius: 8px;
+        overflow-x: auto;
+        margin: 1rem 0;
+    }
+    
+    .markdown-content pre code {
+        background: none;
+        padding: 0;
+    }
+    
+    .markdown-content blockquote {
+        border-left: 4px solid var(--secondary);
+        padding-left: 1rem;
+        margin: 1rem 0;
+        opacity: 0.9;
+    }
+    
+    .markdown-content hr {
+        border: none;
+        border-top: 2px solid rgba(255, 255, 255, 0.2);
+        margin: 2rem 0;
+    }
+    
+    .markdown-content strong {
+        font-weight: 600;
+        color: #fff;
+    }
+    
+    .markdown-content a {
+        color: var(--secondary);
+        text-decoration: none;
+    }
+    
+    .markdown-content a:hover {
+        text-decoration: underline;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div>
     <div style="margin-bottom: 2rem;">
@@ -18,7 +130,15 @@
             <div
                 style="margin-bottom: 1rem; padding: 0.75rem; border-radius: var(--radius-md); background: {% if msg.role == 'user' %}var(--bg-tertiary){% else %}var(--primary){% endif %}; color: white;">
                 <strong>{% if msg.role == 'user' %}You{% else %}AI Assistant{% endif %}:</strong>
-                <p style="margin: 0.5rem 0 0 0; color: white;">{{ msg.content }}</p>
+                <div class="markdown-content" style="margin: 0.5rem 0 0 0; color: white;">
+                    {% if msg.role == 'assistant' %}
+                    <script>
+                        document.write(marked.parse({{ msg.content|tojson }}));
+                    </script>
+                    {% else %}
+                    {{ msg.content }}
+                    {% endif %}
+                </div>
             </div>
             {% endfor %}
             {% else %}
@@ -44,7 +164,7 @@
         <div id="response-area" style="margin-top: 1rem; display: none;">
             <div style="padding: 1rem; background: var(--primary); border-radius: var(--radius-md); color: white;">
                 <strong>AI Assistant:</strong>
-                <p id="response-text" style="margin: 0.5rem 0 0 0; color: white;"></p>
+                <div id="response-text" class="markdown-content" style="margin: 0.5rem 0 0 0; color: white;"></div>
             </div>
         </div>
     </div>
@@ -52,27 +172,173 @@
     <!-- Quick Questions -->
     <div class="card">
         <div class="card-header">
-            <h3 class="card-title">Quick Questions</h3>
+            <h3 class="card-title">💡 Quick Questions</h3>
+            <p style="color: var(--text-muted); font-size: 0.875rem; margin-top: 0.5rem;">Click any question to get instant insights</p>
         </div>
 
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
-            <button class="btn btn-secondary" onclick="askQuestion('What is my total portfolio value?')">
-                What is my total portfolio value?
-            </button>
-            <button class="btn btn-secondary" onclick="askQuestion('Which fund has the best XIRR?')">
-                Which fund has best XIRR?
-            </button>
-            <button class="btn btn-secondary" onclick="askQuestion('How many SIPs do I have?')">
-                How many SIPs do I have?
-            </button>
-            <button class="btn btn-secondary" onclick="askQuestion('Should I rebalance my portfolio?')">
-                Should I rebalance?
-            </button>
+        <!-- Portfolio Analysis Questions -->
+        <div style="margin-bottom: 1.5rem;">
+            <h4 style="font-size: 1rem; margin-bottom: 0.75rem; color: var(--text-secondary);">📊 Portfolio Analysis</h4>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.75rem;">
+                <button class="btn btn-secondary" onclick="askQuestion('What is my total portfolio value and returns?')">
+                    Total Portfolio Value & Returns
+                </button>
+                <button class="btn btn-secondary" onclick="askQuestion('Show me my best and worst performing funds')">
+                    Best & Worst Performers
+                </button>
+                <button class="btn btn-secondary" onclick="askQuestion('What is my asset allocation breakdown?')">
+                    Asset Allocation
+                </button>
+                <button class="btn btn-secondary" onclick="askQuestion('Which funds have negative returns?')">
+                    Funds with Losses
+                </button>
+                <button class="btn btn-secondary" onclick="askQuestion('How concentrated is my portfolio? Is it risky?')">
+                    Portfolio Concentration Risk
+                </button>
+                <button class="btn btn-secondary" onclick="askQuestion('Compare my portfolio returns vs Nifty 50 and Sensex')">
+                    Compare vs Market Indices
+                </button>
+            </div>
+        </div>
+
+        <!-- Strategy & Market Insights -->
+        <div style="margin-bottom: 1.5rem;">
+            <h4 style="font-size: 1rem; margin-bottom: 0.75rem; color: var(--text-secondary);">🎯 Strategy & Market Insights</h4>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.75rem;">
+                <button class="btn btn-secondary" onclick="askQuestion('Should I rebalance my portfolio in the current market conditions?')">
+                    Should I Rebalance in Current Market?
+                </button>
+                <button class="btn btn-secondary" onclick="askQuestion('How is the current market for small cap funds? Should I invest more?')">
+                    Current Small Cap Market Outlook
+                </button>
+                <button class="btn btn-secondary" onclick="askQuestion('Are mid cap funds a good investment opportunity right now?')">
+                    Mid Cap Investment Opportunity
+                </button>
+                <button class="btn btn-secondary" onclick="askQuestion('What are the best consistently performing mutual funds in last 5 years?')">
+                    Best Consistent Performers (5Y)
+                </button>
+                <button class="btn btn-secondary" onclick="askQuestion('Should I shift from large cap to mid/small cap or vice versa?')">
+                    Large vs Mid/Small Cap Strategy
+                </button>
+                <button class="btn btn-secondary" onclick="askQuestion('Which sectors are overvalued or undervalued in current market?')">
+                    Sector Valuation Analysis
+                </button>
+            </div>
+        </div>
+
+        <!-- Advanced Analysis -->
+        <div style="margin-bottom: 1.5rem;">
+            <h4 style="font-size: 1rem; margin-bottom: 0.75rem; color: var(--text-secondary);">🔍 Advanced Analysis</h4>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.75rem;">
+                <button class="btn btn-secondary" onclick="askQuestion('Do I have any overlapping funds? Should I consolidate?')">
+                    Fund Overlap & Consolidation
+                </button>
+                <button class="btn btn-secondary" onclick="askQuestion('Which funds should I exit and what should I buy instead?')">
+                    Exit Strategy & Alternatives
+                </button>
+                <button class="btn btn-secondary" onclick="askQuestion('Is my portfolio diversified enough across sectors and market caps?')">
+                    Diversification Check
+                </button>
+                <button class="btn btn-secondary" onclick="askQuestion('How can I optimize my portfolio for tax efficiency?')">
+                    Tax Optimization Strategy
+                </button>
+                <button class="btn btn-secondary" onclick="askQuestion('Compare expense ratios of my funds vs category average')">
+                    Expense Ratio Analysis
+                </button>
+                <button class="btn btn-secondary" onclick="askQuestion('Which fund managers have the best track record in my portfolio?')">
+                    Fund Manager Track Record
+                </button>
+            </div>
+        </div>
+
+        <!-- SIP & Investment Questions -->
+        <div style="margin-bottom: 1.5rem;">
+            <h4 style="font-size: 1rem; margin-bottom: 0.75rem; color: var(--text-secondary);">� SIP & Investment Strategy</h4>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.75rem;">
+                <button class="btn btn-secondary" onclick="askQuestion('Should I increase, pause, or continue my SIPs in current market?')">
+                    SIP Strategy in Current Market
+                </button>
+                <button class="btn btn-secondary" onclick="askQuestion('Which SIPs are giving me the best returns?')">
+                    Best Performing SIPs
+                </button>
+                <button class="btn btn-secondary" onclick="askQuestion('Should I do lumpsum investment now or wait for market correction?')">
+                    Lumpsum Timing Strategy
+                </button>
+                <button class="btn btn-secondary" onclick="askQuestion('Compare SIP vs lumpsum returns in my portfolio')">
+                    SIP vs Lumpsum Performance
+                </button>
+                <button class="btn btn-secondary" onclick="askQuestion('What is my total monthly SIP commitment and is it optimal?')">
+                    Total SIP Commitment Analysis
+                </button>
+                <button class="btn btn-secondary" onclick="askQuestion('Should I start SIP in any new trending funds?')">
+                    New SIP Opportunities
+                </button>
+            </div>
+        </div>
+
+        <!-- Goal Planning Questions -->
+        <div style="margin-bottom: 1.5rem;">
+            <h4 style="font-size: 1rem; margin-bottom: 0.75rem; color: var(--text-secondary);">🎯 Goal Planning</h4>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.75rem;">
+                <button class="btn btn-secondary" onclick="askQuestion('How much should I invest monthly to reach ₹1 crore in 10 years?')">
+                    SIP for ₹1 Crore in 10 Years
+                </button>
+                <button class="btn btn-secondary" onclick="askQuestion('When will I reach ₹50 lakhs with my current investments?')">
+                    When Will I Reach ₹50 Lakhs?
+                </button>
+                <button class="btn btn-secondary" onclick="askQuestion('Plan a retirement corpus of ₹3 crore in 20 years')">
+                    Retirement Planning (₹3 Cr)
+                </button>
+                <button class="btn btn-secondary" onclick="askQuestion('Can I retire early with my current portfolio growth?')">
+                    Early Retirement Feasibility
+                </button>
+                <button class="btn btn-secondary" onclick="askQuestion('Calculate corpus needed for child education in 15 years')">
+                    Child Education Corpus
+                </button>
+                <button class="btn btn-secondary" onclick="askQuestion('How much lumpsum for ₹25 lakhs in 5 years at 12% return?')">
+                    Lumpsum Calculator
+                </button>
+            </div>
+        </div>
+
+        <!-- Market Research & Trends -->
+        <div>
+            <h4 style="font-size: 1rem; margin-bottom: 0.75rem; color: var(--text-secondary);">� Market Research & Trends</h4>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.75rem;">
+                <button class="btn btn-secondary" onclick="askQuestion('What are the latest mutual fund trends and top performers in 2024?')">
+                    Latest MF Trends & Top Performers
+                </button>
+                <button class="btn btn-secondary" onclick="askQuestion('Compare flexi cap vs multi cap vs large and mid cap funds')">
+                    Flexi vs Multi vs Large-Mid Cap
+                </button>
+                <button class="btn btn-secondary" onclick="askQuestion('Which sectors are expected to perform well in next 6-12 months?')">
+                    Sector Outlook (6-12 Months)
+                </button>
+                <button class="btn btn-secondary" onclick="askQuestion('Are there any new fund launches worth investing in?')">
+                    New Fund Opportunities (NFO)
+                </button>
+                <button class="btn btn-secondary" onclick="askQuestion('Compare my funds with category toppers and benchmarks')">
+                    Compare with Category Leaders
+                </button>
+                <button class="btn btn-secondary" onclick="askQuestion('Which funds consistently beat their benchmark in last 3 years?')">
+                    Benchmark Beaters (3Y)
+                </button>
+            </div>
         </div>
     </div>
 </div>
 
+<!-- Marked.js for Markdown Rendering -->
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
 <script>
+    // Configure marked.js
+    marked.setOptions({
+        breaks: true,
+        gfm: true,
+        headerIds: true,
+        mangle: false
+    });
     // Simple chat functionality
     function askQuestion(question) {
         document.getElementById('message-input').value = question;
@@ -90,10 +356,20 @@
         const sendBtn = document.getElementById('send-btn');
         const responseArea = document.getElementById('response-area');
         const responseText = document.getElementById('response-text');
+        const chatHistory = document.getElementById('chat-history');
 
         // Disable button
         sendBtn.disabled = true;
         sendBtn.textContent = 'Sending...';
+
+        // Immediately add user message to chat history
+        addMessageToHistory('user', message);
+
+        // Clear input
+        messageInput.value = '';
+
+        // Hide previous response area if visible
+        responseArea.style.display = 'none';
 
         try {
             const formData = new FormData();
@@ -110,24 +386,75 @@
 
             const data = await response.json();
 
-            // Show response
-            responseText.textContent = data.response;
+            // Add assistant response to chat history
+            addMessageToHistory('assistant', data.response);
+
+            // Also show in response area for emphasis
+            responseText.innerHTML = marked.parse(data.response);
             responseArea.style.display = 'block';
 
-            // Clear input
-            messageInput.value = '';
-
-            // Reload page after 2 seconds to show in history
-            setTimeout(() => {
-                window.location.reload();
-            }, 2000);
+            // Scroll to bottom of chat history
+            chatHistory.scrollTop = chatHistory.scrollHeight;
 
         } catch (error) {
             alert('Error: ' + error.message);
+            // Remove the user message if request failed
+            const lastMessage = chatHistory.lastElementChild;
+            if (lastMessage && lastMessage.querySelector('strong').textContent === 'You:') {
+                chatHistory.removeChild(lastMessage);
+            }
         } finally {
             sendBtn.disabled = false;
             sendBtn.textContent = 'Send Message';
         }
+    }
+
+    /**
+     * Add a message to the chat history dynamically
+     * @param {string} role - 'user' or 'assistant'
+     * @param {string} content - The message content
+     */
+    function addMessageToHistory(role, content) {
+        const chatHistory = document.getElementById('chat-history');
+        
+        // Create message div
+        const messageDiv = document.createElement('div');
+        messageDiv.style.marginBottom = '1rem';
+        messageDiv.style.padding = '0.75rem';
+        messageDiv.style.borderRadius = 'var(--radius-md)';
+        messageDiv.style.color = 'white';
+        
+        if (role === 'user') {
+            messageDiv.style.background = 'var(--bg-tertiary)';
+        } else {
+            messageDiv.style.background = 'var(--primary)';
+        }
+        
+        // Create content
+        const label = document.createElement('strong');
+        label.textContent = role === 'user' ? 'You:' : 'AI Assistant:';
+        
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'markdown-content';
+        contentDiv.style.marginTop = '0.5rem';
+        contentDiv.style.color = 'white';
+        
+        if (role === 'assistant') {
+            // Render markdown for assistant messages
+            contentDiv.innerHTML = marked.parse(content);
+        } else {
+            // Plain text for user messages
+            contentDiv.textContent = content;
+        }
+        
+        messageDiv.appendChild(label);
+        messageDiv.appendChild(contentDiv);
+        
+        // Append to chat history
+        chatHistory.appendChild(messageDiv);
+        
+        // Scroll to bottom
+        chatHistory.scrollTop = chatHistory.scrollHeight;
     }
 
     // Auto-scroll chat history to bottom

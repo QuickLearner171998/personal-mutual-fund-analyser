@@ -19,22 +19,60 @@ PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
 # =============================================================================
 
 # Primary LLM (for general tasks with reasoning)
-PRIMARY_LLM_MODEL = os.getenv("PRIMARY_LLM_MODEL", "gpt-5")
+PRIMARY_LLM_MODEL = os.getenv("PRIMARY_LLM_MODEL", "gpt-5-mini")  # Changed from gpt-5 for better latency
 
 # Fast LLM for RAG and quick queries (also used for intent classification)
 RAG_LLM_MODEL = os.getenv("RAG_LLM_MODEL", "gpt-4.1-mini")
 
-# Intent Classification Model (GPT-4.1 for accuracy)
-INTENT_CLASSIFICATION_MODEL = os.getenv("INTENT_CLASSIFICATION_MODEL", "gpt-4.1")
+# Intent Classification Model (GPT-4.1 for accuracy and speed)
+INTENT_CLASSIFICATION_MODEL = os.getenv("INTENT_CLASSIFICATION_MODEL", "gpt-4.1-mini")
 
-# Advanced reasoning LLM (for complex thinking)
+# Advanced reasoning LLM (for complex thinking) - Only use when explicitly needed
 REASONING_LLM_MODEL = os.getenv("REASONING_LLM_MODEL", "gpt-5")
 
 # Fallback LLM (when primary fails)
 FALLBACK_LLM_MODEL = os.getenv("FALLBACK_LLM_MODEL", "gemini-2.0-flash-exp")
 
-# Perplexity model (market research)
-PERPLEXITY_MODEL = os.getenv("PERPLEXITY_MODEL", "sonar-pro")
+# Perplexity model (market research) - sonar is faster than sonar-pro
+PERPLEXITY_MODEL = os.getenv("PERPLEXITY_MODEL", "sonar")
+
+# =============================================================================
+# GPT-5 / O1 REASONING EFFORT CONFIGURATION
+# =============================================================================
+# Reasoning effort controls latency vs accuracy trade-off for GPT-5/o1 reasoning models ONLY
+# Does NOT apply to gpt-4.1-mini or other non-reasoning models
+# - "low":    ~1-3s latency,  Good for simple tasks, fast responses
+# - "medium": ~3-6s latency,  Balanced for moderate complexity (DEFAULT)
+# - "high":   ~10-30s latency, Best accuracy for complex reasoning
+#
+# Usage:
+# - General Queries (PRIMARY_LLM if using gpt-5): Use medium (balanced)
+# - Complex Strategy/Analysis (REASONING_LLM when explicitly needed): Use medium
+# - Note: Intent classification uses gpt-4.1-mini, so these settings don't apply
+
+REASONING_EFFORT_DEFAULT = os.getenv("REASONING_EFFORT_DEFAULT", "medium")
+REASONING_EFFORT_STRATEGY = os.getenv("REASONING_EFFORT_STRATEGY", "medium")
+
+# =============================================================================
+# REASONING MODEL LATENCY OPTIMIZATION
+# =============================================================================
+# Additional parameters for GPT-5/o1 models to optimize performance
+
+# Include reasoning traces in response (debugging only, adds latency)
+INCLUDE_REASONING = os.getenv("INCLUDE_REASONING", "false").lower() == "true"
+
+# Max completion tokens (lower = faster response, higher = more detailed)
+# Reasoning models: 4000-16000 tokens typical, adjust based on use case
+# Primary models: 1000-3000 tokens sufficient for most queries
+MAX_COMPLETION_TOKENS_REASONING = int(os.getenv("MAX_COMPLETION_TOKENS_REASONING", "5000"))
+MAX_COMPLETION_TOKENS_PRIMARY = int(os.getenv("MAX_COMPLETION_TOKENS_PRIMARY", "3000"))  # Reduced from 8000 for faster responses
+
+# Enable prompt caching for faster repeated queries (if supported by model)
+ENABLE_PROMPT_CACHING = os.getenv("ENABLE_PROMPT_CACHING", "true").lower() == "true"
+
+# Timeout for reasoning models (in seconds) - prevents hanging on long responses
+REASONING_TIMEOUT = int(os.getenv("REASONING_TIMEOUT", "90"))
+PRIMARY_TIMEOUT = int(os.getenv("PRIMARY_TIMEOUT", "90"))
 
 # =============================================================================
 # EMBEDDING CONFIGURATION
