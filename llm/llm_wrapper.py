@@ -34,29 +34,30 @@ class LLMWrapper:
         )
         logger.info(f"Fallback LLM initialized: {config.FALLBACK_LLM_MODEL}")
     
+    def _is_gpt5_series(self, model_name: str) -> bool:
+        """
+        Check if model is GPT-5 series (gpt-5, gpt-5-mini, etc.)
+        These models use the Responses API with reasoning_effort
+        """
+        model_lower = model_name.lower()
+        return model_lower.startswith("gpt-5")
+    
     def _is_reasoning_model(self, model_name: str) -> bool:
         """
         Check if model supports reasoning_effort parameter
+        Includes GPT-5 series, o1, o3, o4
         """
         model_lower = model_name.lower()
         
-        # Exact matches for reasoning models
-        reasoning_models = [
-            "gpt-5",
-            "o1-preview",
-            "o1-mini",
-            "o1",
-            "o3",
-            "o4"
-        ]
+        # GPT-5 series (including gpt-5-mini)
+        if self._is_gpt5_series(model_name):
+            return True
         
-        # Check for exact match or model that starts with these patterns
+        # Other reasoning models (o1, o3, o4)
+        reasoning_models = ["o1-preview", "o1-mini", "o1", "o3-mini", "o4-mini", "o4", "o3"]
+        
         for rm in reasoning_models:
-            # Exact match
-            if model_lower == rm:
-                return True
-            # Pattern match but exclude "mini" and similar variants
-            if model_lower.startswith(rm) and "mini" not in model_lower and "nano" not in model_lower:
+            if model_lower == rm or model_lower.startswith(f"{rm}-"):
                 return True
         
         return False
@@ -88,23 +89,14 @@ class LLMWrapper:
         
         logger.info(f"Invoking {model_name} (max_tokens={max_tokens}, timeout={timeout}s)")
         
-        # Check if it's a reasoning model (GPT-5, o1, etc.)
+        # Check if it's a GPT-5 series or reasoning model (uses Responses API)
         if self._is_reasoning_model(model_name):
             effort = reasoning_effort or "medium"
-            logger.info(f"Using reasoning model with effort: {effort}")
+            logger.info(f"Using Responses API with reasoning_effort: {effort}")
             
             try:
-                # Use OpenAI Responses API for reasoning models
-                api_messages = []
-                for msg in messages:
-                    role = msg.get("role", "user")
-                    content = msg.get("content", "")
-                    
-                    if role == "system":
-                        # System messages converted to user messages for Responses API
-                        api_messages.append({"role": "user", "content": f"System: {content}"})
-                    else:
-                        api_messages.append({"role": role, "content": content})
+                # Prepare messages - Responses API supports system messages
+                api_messages = messages
                 
                 start_time = time.time()
                 response = self.openai_client.chat.completions.create(
@@ -122,6 +114,13 @@ class LLMWrapper:
                 else:
                     content = response.choices[0].message.content
                     elapsed = time.time() - start_time
+                    
+                    # Log reasoning tokens if available
+                    if hasattr(response, 'usage') and hasattr(response.usage, 'completion_tokens_details'):
+                        details = response.usage.completion_tokens_details
+                        if hasattr(details, 'reasoning_tokens'):
+                            logger.info(f"Reasoning tokens: {details.reasoning_tokens}")
+                    
                     logger.info(f"{model_name} responded in {elapsed:.2f}s")
                     return content
                     
@@ -129,29 +128,18 @@ class LLMWrapper:
                 logger.warning(f"{model_name} failed: {str(e)}, falling back to {config.FALLBACK_LLM_MODEL}")
                 # Fall through to fallback
         else:
-            # Standard OpenAI models (gpt-4.1-mini, gpt-4o, gpt-5-mini, etc.)
-            logger.info(f"Using standard model: {model_name}")
+            # Standard OpenAI models (gpt-4.1-mini, gpt-4o, gpt-4-turbo, etc.)
+            logger.info(f"Using standard Chat Completions API")
             
             try:
                 start_time = time.time()
-                
-                # Check if this is a gpt-5-mini or reasoning-type model that needs max_completion_tokens
-                uses_completion_tokens = "gpt-5" in model_name.lower() or "o1" in model_name.lower()
-                
-                api_params = {
-                    "model": model_name,
-                    "messages": messages,
-                    "timeout": timeout,
-                    "stream": stream
-                }
-                
-                # Use correct token parameter based on model
-                if uses_completion_tokens:
-                    api_params["max_completion_tokens"] = max_tokens
-                else:
-                    api_params["max_tokens"] = max_tokens
-                
-                response = self.openai_client.chat.completions.create(**api_params)
+                response = self.openai_client.chat.completions.create(
+                    model=model_name,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    timeout=timeout,
+                    stream=stream
+                )
                 
                 if stream:
                     logger.info(f"Streaming from {model_name}")

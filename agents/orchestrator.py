@@ -1,6 +1,6 @@
 """
 Multi-Agent Orchestrator
-Coordinates multiple agents to answer complex queries
+Coordinates multiple agents to answer complex queries with parallel execution
 """
 import sys
 from pathlib import Path
@@ -20,6 +20,7 @@ from utils.response_formatter import format_response
 from llm.llm_wrapper import invoke_llm
 import time
 import config
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 logger = get_logger(__name__)
 
@@ -57,37 +58,38 @@ class MultiAgentOrchestrator:
         
         combined_agent_outputs = "\n\n---\n\n".join(agent_outputs)
         
-        synthesis_prompt = f"""You are an expert financial advisor tasked with synthesizing multiple specialized analyses into a single, coherent, and comprehensive response for the user.
+        synthesis_prompt = f"""You are an expert financial advisor synthesizing multiple analyses into ONE cohesive response.
 
 **User's Question:**
 {query}
-
-**Context:**
-Multiple specialized agents have analyzed different aspects of this question. Your job is to:
-1. Synthesize these analyses into ONE unified, flowing response
-2. Remove redundancies and contradictions
-3. Prioritize the most relevant information
-4. Ensure logical flow and coherence
-5. Maintain all specific numbers, percentages, and data points
-6. Keep the response well-structured with clear sections
-7. Use markdown formatting for better readability
-8. If agents provide conflicting advice, acknowledge both perspectives and explain why
 
 **Agent Analyses:**
 
 {combined_agent_outputs}
 
 **Your Task:**
-Create a single, comprehensive response that:
-- Directly answers the user's question
-- Integrates insights from all agents seamlessly
-- Presents information in a logical order
-- Uses clear sections with markdown headers
-- Includes all specific data and recommendations
-- Flows naturally as if written by one expert, not multiple agents
-- Is actionable and easy to understand
+Synthesize into a single, well-formatted response that:
+1. Directly answers the user's question
+2. Integrates insights from all agents seamlessly  
+3. Removes redundancies and contradictions
+4. Presents information in logical order
+5. Maintains all specific data and recommendations
+6. Flows naturally as ONE expert opinion (not multiple agents)
 
-Do NOT simply concatenate the responses. Do NOT mention "Agent X says" or "According to Agent Y". Write as if YOU are the expert who has analyzed all aspects.
+**FORMATTING REQUIREMENTS:**
+- Use clear markdown headers (##, ###)
+- Use tables for numerical data
+- Use bullet points for lists
+- Use bold (**text**) for emphasis
+- Add emojis (📊, 💰, ⚠️, ✅) for visual appeal
+- Use horizontal rules (---) to separate sections
+- Keep paragraphs short and readable
+
+**IMPORTANT:**
+- DO NOT mention "Agent X says" or "According to Agent Y"
+- Write as if YOU are the expert who analyzed everything
+- Be direct, actionable, and easy to understand
+- Include all important numbers and percentages
 
 **Synthesized Response:**"""
 
@@ -189,46 +191,140 @@ Do NOT simply concatenate the responses. Do NOT mention "Agent X says" or "Accor
                     return f"⚠️ Error in {agent_name} agent: {str(e)}\n\nPlease try a different question or check if your portfolio data is loaded."
             
             else:
-                # Multiple agents execution
+                # Multiple agents execution with PARALLEL execution for independent agents
                 logger.info(f"Step 2: Executing {len(agents_to_execute)} agents: {agents_to_execute}")
+                
+                # Determine which agents can run in parallel
+                # Portfolio must run first (provides context), Strategy must run last (needs other data)
+                # Market, Comparison, Goal can run in parallel
+                parallel_agents = []
+                sequential_agents = []
+                
+                if 'portfolio' in agents_to_execute:
+                    sequential_agents.append('portfolio')
+                    agents_to_execute.remove('portfolio')
+                
+                if 'strategy' in agents_to_execute:
+                    agents_to_execute.remove('strategy')
+                    # Strategy runs last
+                
+                # Remaining agents can run in parallel
+                parallel_agents = agents_to_execute.copy()
+                
+                if 'strategy' in plan['agents']:
+                    sequential_agents.append('strategy')
+                
                 responses = []
                 agent_timings = []
                 
-                for idx, agent_name in enumerate(agents_to_execute):
-                    logger.info(f"Processing agent {idx + 1}/{len(agents_to_execute)}: '{agent_name}'")
-                    agent = self.agents.get(agent_name)
+                # Execute portfolio first if needed
+                for agent_name in sequential_agents:
+                    if agent_name == 'portfolio':
+                        agent = self.agents.get(agent_name)
+                        if agent:
+                            logger.info("=" * 60)
+                            logger.info(f"EXECUTING AGENT: {agent_name.upper()} (Sequential - provides context)")
+                            logger.info("=" * 60)
+                            
+                            agent_start = time.time()
+                            try:
+                                response = self._execute_agent(agent_name, agent, query, stream=False)
+                                agent_time = time.time() - agent_start
+                                agent_timings.append((agent_name, agent_time))
+                                
+                                title_map = {
+                                    'portfolio': 'Portfolio Analysis',
+                                    'market': 'Market Research',
+                                    'strategy': 'Strategy Recommendation',
+                                    'comparison': 'Fund Comparison',
+                                    'goal': 'Goal Planning'
+                                }
+                                responses.append((title_map.get(agent_name, agent_name.title()), response))
+                                
+                                logger.info(f"✓ {agent_name.upper()} COMPLETED in {agent_time:.2f}s")
+                                logger.info("=" * 60)
+                            except Exception as e:
+                                logger.error(f"❌ Error in {agent_name}: {str(e)}")
+                                responses.append((agent_name.title(), f"⚠️ Error: {str(e)}"))
+                
+                # Execute parallel agents
+                if parallel_agents:
+                    logger.info(f"⚡ Executing {len(parallel_agents)} agents in PARALLEL: {parallel_agents}")
+                    logger.info("=" * 60)
                     
-                    if not agent:
-                        logger.warning(f"Agent '{agent_name}' not found, skipping")
-                        continue
-                    
-                    try:
-                        logger.info("=" * 60)
-                        logger.info(f"EXECUTING AGENT {idx + 1}/{len(agents_to_execute)}: {agent_name.upper()}")
-                        logger.info("=" * 60)
+                    def execute_agent_parallel(agent_name):
+                        """Execute agent and return results with timing"""
+                        agent = self.agents.get(agent_name)
+                        if not agent:
+                            return (agent_name, None, 0, f"Agent '{agent_name}' not found")
                         
+                        logger.info(f"🚀 Starting {agent_name.upper()} (parallel)")
                         agent_start = time.time()
-                        response = self._execute_agent(agent_name, agent, query, stream=False)
-                        agent_time = time.time() - agent_start
+                        try:
+                            response = self._execute_agent(agent_name, agent, query, stream=False)
+                            agent_time = time.time() - agent_start
+                            logger.info(f"✓ {agent_name.upper()} completed in {agent_time:.2f}s")
+                            return (agent_name, response, agent_time, None)
+                        except Exception as e:
+                            agent_time = time.time() - agent_start
+                            logger.error(f"❌ {agent_name} failed: {str(e)}")
+                            return (agent_name, None, agent_time, str(e))
+                    
+                    # Execute in parallel using ThreadPoolExecutor
+                    parallel_start = time.time()
+                    with ThreadPoolExecutor(max_workers=len(parallel_agents)) as executor:
+                        futures = {executor.submit(execute_agent_parallel, agent_name): agent_name 
+                                 for agent_name in parallel_agents}
                         
-                        agent_timings.append((agent_name, agent_time))
-                        
-                        # Map agent name to display title
-                        title_map = {
-                            'portfolio': 'Portfolio Analysis',
-                            'market': 'Market Research',
-                            'strategy': 'Strategy Recommendation',
-                            'comparison': 'Fund Comparison',
-                            'goal': 'Goal Planning'
-                        }
-                        responses.append((title_map.get(agent_name, agent_name.title()), response))
-                        
-                        logger.info(f"{agent_name.upper()} AGENT COMPLETED (took {agent_time:.2f}s)")
-                        logger.info("=" * 60)
-                        
-                    except Exception as e:
-                        logger.error(f"Error in {agent_name} agent: {str(e)}")
-                        responses.append((agent_name.title(), f"⚠️ Error: {str(e)}"))
+                        for future in as_completed(futures):
+                            agent_name, response, agent_time, error = future.result()
+                            agent_timings.append((agent_name, agent_time))
+                            
+                            if error:
+                                responses.append((agent_name.title(), f"⚠️ Error: {error}"))
+                            else:
+                                title_map = {
+                                    'portfolio': 'Portfolio Analysis',
+                                    'market': 'Market Research',
+                                    'strategy': 'Strategy Recommendation',
+                                    'comparison': 'Fund Comparison',
+                                    'goal': 'Goal Planning'
+                                }
+                                responses.append((title_map.get(agent_name, agent_name.title()), response))
+                    
+                    parallel_time = time.time() - parallel_start
+                    logger.info(f"⚡ Parallel execution completed in {parallel_time:.2f}s")
+                    logger.info("=" * 60)
+                
+                # Execute strategy last if needed
+                for agent_name in sequential_agents:
+                    if agent_name == 'strategy':
+                        agent = self.agents.get(agent_name)
+                        if agent:
+                            logger.info("=" * 60)
+                            logger.info(f"EXECUTING AGENT: {agent_name.upper()} (Sequential - synthesizes strategy)")
+                            logger.info("=" * 60)
+                            
+                            agent_start = time.time()
+                            try:
+                                response = self._execute_agent(agent_name, agent, query, stream=False)
+                                agent_time = time.time() - agent_start
+                                agent_timings.append((agent_name, agent_time))
+                                
+                                title_map = {
+                                    'portfolio': 'Portfolio Analysis',
+                                    'market': 'Market Research',
+                                    'strategy': 'Strategy Recommendation',
+                                    'comparison': 'Fund Comparison',
+                                    'goal': 'Goal Planning'
+                                }
+                                responses.append((title_map.get(agent_name, agent_name.title()), response))
+                                
+                                logger.info(f"✓ {agent_name.upper()} COMPLETED in {agent_time:.2f}s")
+                                logger.info("=" * 60)
+                            except Exception as e:
+                                logger.error(f"❌ Error in {agent_name}: {str(e)}")
+                                responses.append((agent_name.title(), f"⚠️ Error: {str(e)}"))
                 
                 if not responses:
                     logger.error("No responses received from any agent")
@@ -238,23 +334,34 @@ Do NOT simply concatenate the responses. Do NOT mention "Agent X says" or "Accor
                 logger.info("=" * 60)
                 logger.info("AGENT TIMING BREAKDOWN:")
                 for agent_name, timing in agent_timings:
-                    logger.info(f"  {agent_name}: {timing:.2f}s")
+                    logger.info(f"  ✓ {agent_name}: {timing:.2f}s")
                 logger.info("=" * 60)
                 
+                # Display individual agent responses
+                logger.info("=" * 60)
+                logger.info("INDIVIDUAL AGENT RESPONSES:")
+                logger.info("=" * 60)
+                for title, response in responses:
+                    logger.info(f"\n{'='*60}")
+                    logger.info(f"📋 {title.upper()}")
+                    logger.info(f"{'='*60}")
+                    logger.info(f"{response[:300]}..." if len(response) > 300 else response)
+                    logger.info(f"{'='*60}\n")
+                
                 # Use LLM to synthesize responses
-                logger.info(f"Using {config.SYNTHESIZER_LLM_MODEL} to synthesize {len(responses)} agent responses")
+                logger.info(f"🔄 Synthesizing {len(responses)} agent responses using {config.SYNTHESIZER_LLM_MODEL}")
                 synthesis_start = time.time()
                 synthesized = self._synthesize_responses(query, responses)
                 synthesis_time = time.time() - synthesis_start
-                logger.info(f"Response synthesis completed (took {synthesis_time:.2f}s)")
+                logger.info(f"✓ Response synthesis completed in {synthesis_time:.2f}s")
                 
                 total_time = time.time() - query_start_time
                 logger.info("=" * 60)
-                logger.info(f"TOTAL QUERY PROCESSING TIME: {total_time:.2f}s")
-                logger.info(f"  - Planning: {planning_time:.2f}s")
+                logger.info(f"📊 TOTAL QUERY PROCESSING TIME: {total_time:.2f}s")
+                logger.info(f"  - ⏱️  Planning: {planning_time:.2f}s")
                 for agent_name, timing in agent_timings:
-                    logger.info(f"  - {agent_name}: {timing:.2f}s")
-                logger.info(f"  - Synthesis: {synthesis_time:.2f}s")
+                    logger.info(f"  - 🤖 {agent_name}: {timing:.2f}s")
+                logger.info(f"  - 🔄 Synthesis: {synthesis_time:.2f}s")
                 logger.info("=" * 60)
                 
                 return synthesized

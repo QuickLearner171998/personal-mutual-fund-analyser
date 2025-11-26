@@ -54,17 +54,17 @@ class PlanningAgent:
 
 **Query:** "{query}"
 
-**Instructions:**
-1. Select minimum required specialists
-2. Order them logically (portfolio first if needed, strategy last)
-3. Explain your reasoning briefly
+**CRITICAL CONSTRAINTS:**
+- Maximum 3 agents (keep it simple and focused)
+- Select ONLY the minimum required specialists
+- Order them logically (portfolio first if needed, strategy last)
 
 **Rules:**
 - Portfolio questions only → portfolio
 - Market data only → market
-- "Should I..." questions → portfolio + market + strategy
-- Fund comparisons → comparison (+ market if needed)
-- Goal planning → portfolio + goal
+- "Should I..." questions → portfolio + market + strategy (max 3)
+- Fund comparisons → comparison OR comparison + market (max 2)
+- Goal planning → goal OR portfolio + goal (max 2)
 
 **Output (JSON only, no markdown):**
 {{
@@ -79,13 +79,13 @@ Q: "What is my total investment?"
 {{"agents": ["portfolio"], "reasoning": "Simple portfolio query", "execution_order": ["portfolio"]}}
 
 Q: "Should I shift from large cap to mid cap?"
-{{"agents": ["portfolio", "market", "strategy"], "reasoning": "Need current holdings, market trends, then strategy", "execution_order": ["portfolio", "market", "strategy"]}}
+{{"agents": ["portfolio", "market", "strategy"], "reasoning": "Need holdings, trends, strategy", "execution_order": ["portfolio", "market", "strategy"]}}
 
 Q: "Latest NAV of HDFC Flexi Cap"
-{{"agents": ["market"], "reasoning": "Real-time market data query", "execution_order": ["market"]}}
+{{"agents": ["market"], "reasoning": "Real-time market data", "execution_order": ["market"]}}
 
-Q: "Compare SBI Small Cap vs Kotak Small Cap"
-{{"agents": ["comparison", "market"], "reasoning": "Need fund comparison with market context", "execution_order": ["market", "comparison"]}}
+Q: "Compare SBI vs Kotak Small Cap"
+{{"agents": ["comparison"], "reasoning": "Fund comparison query", "execution_order": ["comparison"]}}
 
 Create plan:"""
 
@@ -122,6 +122,12 @@ Create plan:"""
                 if key not in plan:
                     raise ValueError(f"Missing required key: {key}")
             
+            # Enforce max 3 agents
+            if len(plan["agents"]) > 3:
+                logger.warning(f"Plan has {len(plan['agents'])} agents, limiting to 3")
+                plan["agents"] = plan["agents"][:3]
+                plan["execution_order"] = plan["execution_order"][:3]
+            
             # Validate agents
             valid_agents = ["portfolio", "market", "strategy", "comparison", "goal"]
             for agent in plan["agents"]:
@@ -131,8 +137,8 @@ Create plan:"""
                     if agent in plan["execution_order"]:
                         plan["execution_order"].remove(agent)
             
-            logger.info(f"Created execution plan: {plan['agents']}")
-            logger.info(f"Reasoning: {plan['reasoning']}")
+            logger.info(f"✓ Execution plan created: {plan['agents']}")
+            logger.info(f"✓ Reasoning: {plan['reasoning']}")
             
             return plan
             
