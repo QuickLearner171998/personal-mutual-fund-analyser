@@ -11,7 +11,11 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-from core.unified_processor import process_mf_central_complete
+from core.unified_processor import (
+    process_mf_central_complete, 
+    aggregate_holdings_for_display,
+    match_sips_with_holdings
+)
 from database.json_store import PortfolioStore
 from vector_db.portfolio_indexer import index_portfolio_data
 from agents.orchestrator import MultiAgentOrchestrator
@@ -40,20 +44,39 @@ def index():
 
 @app.route('/dashboard')
 def dashboard():
-    """Portfolio dashboard"""
+    """Portfolio dashboard with aggregated holdings"""
     try:
         portfolio = store.get_portfolio()
         if not portfolio:
-            return render_template('dashboard.html', summary=None, holdings=[])
+            logger.info("No portfolio data found in dashboard")
+            return render_template('dashboard.html', summary=None, holdings=[], has_broker_info=False)
         
         holdings = portfolio.get('holdings', [])
-        # Sort by current value
-        holdings = sorted(holdings, key=lambda x: x.get('current_value', 0), reverse=True)
+        logger.info(f"Dashboard: Processing {len(holdings)} holdings")
         
-        return render_template('dashboard.html', summary=portfolio, holdings=holdings)
+        # Aggregate holdings for display
+        aggregated_holdings, aggregation_map = aggregate_holdings_for_display(holdings)
+        logger.info(f"Dashboard: Aggregated to {len(aggregated_holdings)} holdings, merged {len(aggregation_map)} duplicates")
+        
+        # Sort by current value
+        aggregated_holdings = sorted(aggregated_holdings, key=lambda x: x.get('current_value', 0), reverse=True)
+        
+        # Check if any holdings have broker info
+        has_broker_info = any(h.get('broker') for h in holdings)
+        logger.info(f"Dashboard: Broker info available: {has_broker_info}")
+        
+        return render_template(
+            'dashboard.html', 
+            summary=portfolio, 
+            holdings=aggregated_holdings,
+            has_broker_info=has_broker_info
+        )
     except Exception as e:
+        import traceback
+        logger.error(f'Dashboard error: {str(e)}')
+        logger.error(f'Dashboard error traceback: {traceback.format_exc()}')
         flash(f'Error loading dashboard: {str(e)}', 'error')
-        return render_template('dashboard.html', summary=None, holdings=[])
+        return render_template('dashboard.html', summary=None, holdings=[], has_broker_info=False)
 
 
 @app.route('/upload', methods=['GET', 'POST'])
@@ -64,7 +87,13 @@ def upload():
         transaction_json = request.files.get('transaction_json')
         xirr_json = request.files.get('xirr_json')
         
+        logger.info("Upload request received")
+        logger.info(f"Files: excel={excel_file.filename if excel_file else 'None'}, "
+                   f"transaction={transaction_json.filename if transaction_json else 'None'}, "
+                   f"xirr={xirr_json.filename if xirr_json else 'None'}")
+        
         if not all([excel_file, transaction_json, xirr_json]):
+            logger.warning("Missing files in upload request")
             flash('Please upload all 3 required files', 'error')
             return redirect(url_for('upload'))
         
@@ -75,18 +104,24 @@ def upload():
             transaction_path = os.path.join(UPLOAD_DIR, transaction_json.filename)
             xirr_path = os.path.join(UPLOAD_DIR, xirr_json.filename)
             
+            logger.info(f"Saving files to {UPLOAD_DIR}")
             excel_file.save(excel_path)
             transaction_json.save(transaction_path)
             xirr_json.save(xirr_path)
+            logger.info("Files saved successfully")
             
             # Process files
+            logger.info("Starting data processing")
             portfolio_data = process_mf_central_complete(
                 excel_path=excel_path,
                 transaction_json_path=transaction_path,
                 xirr_json_path=xirr_path
             )
+            logger.info(f"Data processing completed: {portfolio_data.get('num_funds', 0)} funds, "
+                       f"{portfolio_data.get('num_active_sips', 0)} active SIPs")
             
             # Save to database
+            logger.info("Saving to database")
             store.save_complete_data(
                 portfolio=portfolio_data,
                 transactions=[],
@@ -94,6 +129,7 @@ def upload():
                 broker_info=portfolio_data.get('broker_info', {}),
                 aggregation_map={}
             )
+            logger.info("Database save completed")
             
             # Index for vector search
             try:
@@ -102,11 +138,17 @@ def upload():
                 logger.info("Vector indexing completed")
             except Exception as e:
                 logger.warning(f"Vector indexing failed: {e}")
+                import traceback
+                logger.warning(f"Vector indexing traceback: {traceback.format_exc()}")
             
             flash(f'Successfully processed {portfolio_data.get("num_funds", 0)} funds!', 'success')
+            logger.info("Upload completed successfully, redirecting to dashboard")
             return redirect(url_for('dashboard'))
         
         except Exception as e:
+            import traceback
+            logger.error(f'Upload failed: {str(e)}')
+            logger.error(f'Upload error traceback: {traceback.format_exc()}')
             flash(f'Upload failed: {str(e)}', 'error')
             return redirect(url_for('upload'))
     
@@ -115,54 +157,101 @@ def upload():
 
 @app.route('/sip-analytics')
 def sip_analytics():
-    """SIP analytics page"""
+    """SIP analytics page with returns data"""
     try:
+        logger.info("Loading SIP analytics")
         portfolio = store.get_portfolio()
         sips = store.get_sips()
         
         if not portfolio or not sips:
-            return render_template('sip_analytics.html', analytics=None, sips=[], upcoming={'upcoming_sips': [], 'count': 0, 'total_amount': 0})
+            logger.warning("No portfolio or SIP data found")
+            return render_template('sip_analytics.html', analytics=None, active_sips=[], inactive_sips=[], upcoming={'upcoming_sips': [], 'count': 0, 'total_amount': 0})
+        
+        # Get holdings for matching
+        holdings = portfolio.get('holdings', [])
+        logger.info(f"SIP Analytics: Matching {len(sips)} SIPs with {len(holdings)} holdings")
+        
+        # Match SIPs with holdings to get returns data
+        enriched_sips = match_sips_with_holdings(sips, holdings)
+        logger.info(f"SIP Analytics: Enriched {len(enriched_sips)} SIPs with returns data")
+        
+        # Separate active and inactive SIPs (already marked in the data)
+        active_sips = [s for s in enriched_sips if s.get('is_active', False)]
+        inactive_sips = [s for s in enriched_sips if not s.get('is_active', False)]
+        
+        logger.info(f"SIP Analytics: {len(active_sips)} active, {len(inactive_sips)} inactive")
         
         # Calculate analytics
-        total_sips = len(sips)
-        active_sips = [s for s in sips if s.get('is_active', True)]
         monthly_outflow = sum(s.get('sip_amount', 0) for s in active_sips if s.get('frequency', '').lower() == 'monthly')
+        total_sip_invested = sum(s.get('total_invested_sip', 0) for s in active_sips)
+        total_sip_current = sum(s.get('current_value', 0) for s in active_sips)
         
-        # Calculate upcoming SIPs
-        from datetime import datetime, timedelta
-        today = datetime.now()
+        analytics = {
+            'data': {
+                'total_sips': len(enriched_sips),
+                'active_sips': len(active_sips),
+                'inactive_sips': len(inactive_sips),
+                'monthly_outflow': monthly_outflow,
+                'avg_sip_amount': monthly_outflow / len(active_sips) if active_sips else 0,
+                'total_invested': total_sip_invested,
+                'total_current_value': total_sip_current,
+                'total_returns': total_sip_current - total_sip_invested
+            }
+        }
+        
+        # Calculate upcoming SIPs (next 30 days)
+        from datetime import datetime, date, timedelta
+        today = date.today()
         upcoming = []
         total_amount = 0
         
         for sip in active_sips:
-            next_date = sip.get('next_installment_date')
-            if next_date:
+            last_date = sip.get('last_installment_date')
+            frequency = sip.get('frequency', 'Monthly')
+            
+            if last_date:
                 try:
-                    next_date_dt = datetime.strptime(next_date, '%Y-%m-%d')
-                    days_until = (next_date_dt - today).days
+                    # Handle date object or string
+                    if isinstance(last_date, str):
+                        last_date_obj = datetime.strptime(last_date, '%Y-%m-%d').date()
+                    elif isinstance(last_date, date):
+                        last_date_obj = last_date
+                    else:
+                        continue
+                    
+                    # Calculate next date based on frequency
+                    if frequency.lower() == 'monthly':
+                        # Add roughly a month
+                        next_month = last_date_obj.month + 1 if last_date_obj.month < 12 else 1
+                        next_year = last_date_obj.year if last_date_obj.month < 12 else last_date_obj.year + 1
+                        try:
+                            next_date = date(next_year, next_month, last_date_obj.day)
+                        except ValueError:
+                            # Handle month-end dates (e.g., Jan 31 -> Feb 28)
+                            next_date = date(next_year, next_month, 28)
+                    elif frequency.lower() == 'quarterly':
+                        next_date = last_date_obj + timedelta(days=90)
+                    elif frequency.lower() == 'weekly':
+                        next_date = last_date_obj + timedelta(days=7)
+                    else:
+                        next_date = last_date_obj + timedelta(days=30)
+                    
+                    days_until = (next_date - today).days
                     
                     if 0 <= days_until <= 30:
                         upcoming.append({
                             'scheme_name': sip.get('scheme_name', ''),
                             'sip_amount': sip.get('sip_amount', 0),
-                            'date': next_date,
+                            'date': next_date.strftime('%Y-%m-%d'),
                             'days_until': days_until,
-                            'broker': sip.get('broker', 'Unknown')
+                            'broker': sip.get('broker', '')
                         })
                         total_amount += sip.get('sip_amount', 0)
-                except:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Error calculating next SIP date for {sip.get('scheme_name', 'Unknown')}: {e}")
+                    continue
         
         upcoming.sort(key=lambda x: x['days_until'])
-        
-        analytics = {
-            'data': {
-                'total_sips': total_sips,
-                'active_sips': len(active_sips),
-                'monthly_outflow': monthly_outflow,
-                'avg_sip_amount': monthly_outflow / len(active_sips) if active_sips else 0
-            }
-        }
         
         upcoming_data = {
             'upcoming_sips': upcoming,
@@ -170,11 +259,26 @@ def sip_analytics():
             'total_amount': total_amount
         }
         
-        return render_template('sip_analytics.html', analytics=analytics, sips=sips, upcoming=upcoming_data)
+        # Sort by current value
+        active_sips = sorted(active_sips, key=lambda x: x.get('current_value', 0), reverse=True)
+        inactive_sips = sorted(inactive_sips, key=lambda x: x.get('scheme_name', ''))
+        
+        logger.info(f"SIP Analytics: Rendering with {len(active_sips)} active, {len(inactive_sips)} inactive SIPs")
+        
+        return render_template(
+            'sip_analytics.html', 
+            analytics=analytics, 
+            active_sips=active_sips,
+            inactive_sips=inactive_sips,
+            upcoming=upcoming_data
+        )
     
     except Exception as e:
+        import traceback
+        logger.error(f'SIP analytics error: {str(e)}')
+        logger.error(f'SIP analytics error traceback: {traceback.format_exc()}')
         flash(f'Error loading SIP analytics: {str(e)}', 'error')
-        return render_template('sip_analytics.html', analytics=None, sips=[], upcoming={'upcoming_sips': [], 'count': 0, 'total_amount': 0})
+        return render_template('sip_analytics.html', analytics=None, active_sips=[], inactive_sips=[], upcoming={'upcoming_sips': [], 'count': 0, 'total_amount': 0})
 
 
 @app.route('/chat', methods=['GET', 'POST'])

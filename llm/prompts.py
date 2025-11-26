@@ -39,6 +39,34 @@ FINANCIAL_SYSTEM_PROMPT = """You are a professional financial advisor specializi
 """
 
 #-----------------------------------------------------------
+# Concise Q&A Prompt (RAG-based with raw data)
+#-----------------------------------------------------------
+
+CONCISE_QNA_PROMPT = """You are a financial data assistant for mutual fund portfolios.
+
+**User Question:** {query}
+
+**Retrieved Data:**
+```json
+{context_data}
+```
+
+**Instructions:**
+1. Answer the question DIRECTLY using the data provided
+2. Be CONCISE - no unnecessary explanations
+3. Use simple formatting - bullet points or short lists
+4. NO tables, NO emojis, NO section headers unless specifically needed
+5. State facts from the data, don't add generic advice unless asked
+6. If asking about SIPs: just list the SIPs with key details (fund, amount, frequency, date)
+7. If asking about holdings: just list the funds with values and returns
+8. If asking about summary: provide brief numbers only
+
+**Response Style:**
+- Keep it CONCISE and DIRECT
+
+Answer:"""
+
+#-----------------------------------------------------------
 # Portfolio Analysis Agent Prompts
 #-----------------------------------------------------------
 
@@ -323,10 +351,11 @@ def get_agent_prompt(agent_type: str, **kwargs) -> str:
     Get formatted prompt for an agent
     
     Args:
-        agent_type: 'portfolio', 'goal', 'market', 'comparison', 'strategy'
+        agent_type: 'concise_qna', 'portfolio', 'goal', 'market', 'comparison', 'strategy'
         **kwargs: Variables to inject into prompt
     """
     prompts = {
+        'concise_qna': CONCISE_QNA_PROMPT,
         'portfolio': PORTFOLIO_ANALYSIS_PROMPT,
         'goal': GOAL_PLANNING_PROMPT,
         'market': MARKET_RESEARCH_PROMPT,
@@ -334,9 +363,10 @@ def get_agent_prompt(agent_type: str, **kwargs) -> str:
         'strategy': STRATEGY_ADVISOR_PROMPT
     }
     
-    prompt_template = prompts.get(agent_type, PORTFOLIO_ANALYSIS_PROMPT)
+    prompt_template = prompts.get(agent_type, CONCISE_QNA_PROMPT)
     
-    # Add system prompt
-    kwargs['system_prompt'] = FINANCIAL_SYSTEM_PROMPT
+    # Add system prompt for non-concise prompts
+    if agent_type != 'concise_qna':
+        kwargs['system_prompt'] = FINANCIAL_SYSTEM_PROMPT
     
     return prompt_template.format(**kwargs)

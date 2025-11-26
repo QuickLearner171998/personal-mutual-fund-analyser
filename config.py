@@ -23,8 +23,11 @@ PLANNING_LLM_MODEL = os.getenv("PLANNING_LLM_MODEL", "gpt-5")
 PLANNING_REASONING_EFFORT = os.getenv("PLANNING_REASONING_EFFORT", "medium")
 PLANNING_MAX_TOKENS = int(os.getenv("PLANNING_MAX_TOKENS", "500"))  # Optimized: JSON responses are concise
 
-# Portfolio Agent - RAG queries (fast and accurate)
-PORTFOLIO_LLM_MODEL = os.getenv("PORTFOLIO_LLM_MODEL", "gpt-4.1-mini")
+# RAG Query Analyzer - Uses o3-mini for query understanding
+RAG_QUERY_ANALYZER_MODEL = os.getenv("RAG_QUERY_ANALYZER_MODEL", "o3-mini")
+
+# Portfolio Agent - RAG queries (upgraded to o3-mini for query analysis)
+PORTFOLIO_LLM_MODEL = os.getenv("PORTFOLIO_LLM_MODEL", "o3-mini")
 PORTFOLIO_MAX_TOKENS = int(os.getenv("PORTFOLIO_MAX_TOKENS", "5000"))
 
 # Market Agent - Real-time market research (Perplexity)
@@ -44,9 +47,9 @@ STRATEGY_LLM_MODEL = os.getenv("STRATEGY_LLM_MODEL", "gpt-5-mini")
 STRATEGY_MAX_TOKENS = int(os.getenv("STRATEGY_MAX_TOKENS", "2000"))
 STRATEGY_REASONING_EFFORT = os.getenv("STRATEGY_REASONING_EFFORT", "medium")
 
-# Synthesizer - Combines agent responses for best presentation
-SYNTHESIZER_LLM_MODEL = os.getenv("SYNTHESIZER_LLM_MODEL", "gpt-4.1-mini")
-SYNTHESIZER_MAX_TOKENS = int(os.getenv("SYNTHESIZER_MAX_TOKENS", "5000"))
+# Synthesizer - Combines agent responses for best presentation (upgraded to gpt-4.1)
+SYNTHESIZER_LLM_MODEL = os.getenv("SYNTHESIZER_LLM_MODEL", "gpt-4.1")
+SYNTHESIZER_MAX_TOKENS = int(os.getenv("SYNTHESIZER_MAX_TOKENS", "3000"))  # Reduced for concise responses
 SYNTHESIZER_TIMEOUT = int(os.getenv("SYNTHESIZER_TIMEOUT", "90"))
 
 # Fallback LLM (when OpenAI models fail)

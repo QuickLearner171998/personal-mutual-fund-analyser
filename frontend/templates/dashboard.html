@@ -41,42 +41,91 @@
     <div class="card">
         <div class="card-header">
             <h3 class="card-title">Holdings</h3>
-            <p style="color: var(--text-muted); font-size: 0.875rem;">{{ holdings|length }} total holdings</p>
+            <p style="color: var(--text-muted); font-size: 0.875rem;">{{ holdings|length }} holdings displayed</p>
         </div>
 
         <div class="table-container">
             <table>
                 <thead>
                     <tr>
-                        <th>Scheme Name</th>
+                        <th style="width: 35%;">Scheme Name</th>
                         <th>Current Value</th>
                         <th>Invested</th>
                         <th>Gain/Loss</th>
                         <th>Returns %</th>
                         <th>XIRR %</th>
+                        {% if has_broker_info %}
                         <th>Broker</th>
+                        {% endif %}
                     </tr>
                 </thead>
                 <tbody>
                     {% for holding in holdings %}
-                    <tr>
-                        <td>{{ holding.scheme_name|truncate_text(50) }}</td>
-                        <td>{{ holding.current_value|currency }}</td>
+                    <!-- Main row (aggregated or single) -->
+                    <tr class="{% if holding.is_aggregated %}aggregated-row{% endif %}" 
+                        {% if holding.is_aggregated %}data-holding-id="{{ loop.index }}"{% endif %}>
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                {% if holding.is_aggregated %}
+                                <span class="expand-icon" onclick="toggleFolioDetails({{ loop.index }})" style="cursor: pointer; user-select: none;">
+                                    ▶
+                                </span>
+                                {% endif %}
+                                <div style="flex: 1;">
+                                    <div class="scheme-name" title="{{ holding.scheme_name }}">
+                                        {{ holding.scheme_name }}
+                                    </div>
+                                    {% if holding.is_aggregated %}
+                                    <span class="folio-badge">{{ holding.folio_count }} folios</span>
+                                    {% else %}
+                                    <span class="folio-number">{{ holding.folio_number }}</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </td>
+                        <td><strong>{{ holding.current_value|currency }}</strong></td>
                         <td>{{ holding.cost_value|currency }}</td>
-                        <td
-                            style="color: {% if holding.gain_loss > 0 %}var(--success){% elif holding.gain_loss < 0 %}var(--danger){% else %}var(--text-secondary){% endif %}">
+                        <td style="color: {% if holding.gain_loss > 0 %}var(--success){% elif holding.gain_loss < 0 %}var(--danger){% else %}var(--text-secondary){% endif %}">
                             {{ holding.gain_loss|currency }}
                         </td>
-                        <td
-                            style="color: {% if holding.gain_loss_percent > 0 %}var(--success){% elif holding.gain_loss_percent < 0 %}var(--danger){% else %}var(--text-secondary){% endif %}">
+                        <td style="color: {% if holding.gain_loss_percent > 0 %}var(--success){% elif holding.gain_loss_percent < 0 %}var(--danger){% else %}var(--text-secondary){% endif %}">
                             {{ holding.gain_loss_percent|percentage }}
                         </td>
-                        <td
-                            style="color: {% if holding.xirr > 0 %}var(--success){% elif holding.xirr < 0 %}var(--danger){% else %}var(--text-secondary){% endif %}">
+                        <td style="color: {% if holding.xirr > 0 %}var(--success){% elif holding.xirr < 0 %}var(--danger){% else %}var(--text-secondary){% endif %}">
                             {{ holding.xirr|percentage }}
                         </td>
-                        <td>{{ holding.broker }}</td>
+                        {% if has_broker_info %}
+                        <td>{{ holding.broker if holding.broker else '-' }}</td>
+                        {% endif %}
                     </tr>
+                    
+                    <!-- Expandable detail rows for aggregated holdings -->
+                    {% if holding.is_aggregated %}
+                    {% set parent_index = loop.index %}
+                    {% for folio_holding in holding.individual_folios %}
+                    <tr class="folio-detail-row" id="detail-{{ parent_index }}-{{ loop.index }}" style="display: none;">
+                        <td style="padding-left: 3rem;">
+                            <div style="font-size: 0.875rem; color: var(--text-secondary);">
+                                Folio: {{ folio_holding.folio_number }}
+                            </div>
+                        </td>
+                        <td style="font-size: 0.875rem;">{{ folio_holding.current_value|currency }}</td>
+                        <td style="font-size: 0.875rem;">{{ folio_holding.cost_value|currency }}</td>
+                        <td style="font-size: 0.875rem; color: {% if folio_holding.gain_loss > 0 %}var(--success){% elif folio_holding.gain_loss < 0 %}var(--danger){% else %}var(--text-secondary){% endif %}">
+                            {{ folio_holding.gain_loss|currency }}
+                        </td>
+                        <td style="font-size: 0.875rem; color: {% if folio_holding.gain_loss_percent > 0 %}var(--success){% elif folio_holding.gain_loss_percent < 0 %}var(--danger){% else %}var(--text-secondary){% endif %}">
+                            {{ folio_holding.gain_loss_percent|percentage }}
+                        </td>
+                        <td style="font-size: 0.875rem; color: {% if folio_holding.xirr > 0 %}var(--success){% elif folio_holding.xirr < 0 %}var(--danger){% else %}var(--text-secondary){% endif %}">
+                            {{ folio_holding.xirr|percentage }}
+                        </td>
+                        {% if has_broker_info %}
+                        <td style="font-size: 0.875rem;">{{ folio_holding.broker if folio_holding.broker else '-' }}</td>
+                        {% endif %}
+                    </tr>
+                    {% endfor %}
+                    {% endif %}
                     {% endfor %}
                 </tbody>
             </table>

@@ -2,6 +2,12 @@
 
 AI-powered mutual fund portfolio analyzer with comprehensive analytics, SIP tracking, and broker analysis.
 
+## 🆕 Recent Updates (Nov 2025)
+- ✅ Fixed SIP logic: Active = current month transactions (11 active, 3 inactive)
+- ✅ RAG optimized: Raw data storage with complete metadata for LLM
+- ✅ UI: Removed upcoming SIP table, shows active/inactive separately
+- ✅ Dashboard: Expandable rows, full scheme names, broker matching
+
 ## 🎯 Features
 
 - 📁 **MF Central Data Import** - Upload 3 files (Excel + 2 JSONs) from MF Central

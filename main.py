@@ -282,6 +282,50 @@ for agent_name, agent, method_name, test_query in agent_tests:
 
 logger.info("-" * 80)
 
+# Test 11: Test "My current SIP" Query (Improved RAG System)
+logger.info("▶ Step 11: Testing 'My current SIP' Query with Improved RAG System...")
+logger.info("=" * 60)
+logger.info("TESTING IMPROVED Q&A SYSTEM - 'MY CURRENT SIP' QUERY")
+logger.info("=" * 60)
+
+try:
+    logger.info("Testing the specific query that was improved")
+    logger.info("Query: 'My current SIP'")
+    logger.info("")
+    
+    orchestrator = MultiAgentOrchestrator()
+    response = orchestrator.process_query("My current SIP")
+    
+    logger.info("=" * 80)
+    logger.info("RESPONSE TO 'MY CURRENT SIP':")
+    logger.info("=" * 80)
+    logger.info(response)
+    logger.info("=" * 80)
+    logger.info("")
+    logger.info(f"Response length: {len(response)} characters")
+    logger.info(f"Response word count: {len(response.split())} words")
+    
+    # Check if response is concise
+    if len(response.split()) < 100:
+        logger.info("✅ Response is CONCISE (< 100 words)")
+    else:
+        logger.warning(f"⚠️  Response might be verbose ({len(response.split())} words)")
+    
+    # Check if it mentions SIPs
+    if 'sip' in response.lower():
+        logger.info("✅ Response mentions SIPs")
+    else:
+        logger.warning("⚠️  Response doesn't mention SIPs")
+    
+    logger.info("✅ 'My current SIP' query test completed")
+    
+except Exception as e:
+    logger.error(f"❌ 'My current SIP' query failed: {str(e)}")
+    import traceback
+    traceback.print_exc()
+
+logger.info("-" * 80)
+
 
 # Summary
 logger.info("=" * 80)

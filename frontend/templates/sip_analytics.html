@@ -15,7 +15,7 @@
         <div class="metric-card">
             <div class="metric-label">Active SIPs</div>
             <div class="metric-value">{{ analytics.data.active_sips }}</div>
-            <div class="metric-change">{{ analytics.data.total_sips }} total</div>
+            <div class="metric-change">{{ analytics.data.inactive_sips }} inactive</div>
         </div>
 
         <div class="metric-card">
@@ -25,44 +25,72 @@
         </div>
 
         <div class="metric-card">
-            <div class="metric-label">Upcoming (30 days)</div>
-            <div class="metric-value">{{ upcoming.count }}</div>
-            <div class="metric-change">{{ upcoming.total_amount|currency }}</div>
+            <div class="metric-label">Total Invested (SIPs)</div>
+            <div class="metric-value">{{ analytics.data.total_invested|currency }}</div>
+            <div class="metric-change">Current: {{ analytics.data.total_current_value|currency }}</div>
+        </div>
+
+        <div class="metric-card">
+            <div class="metric-label">SIP Returns</div>
+            <div class="metric-value" style="color: {% if analytics.data.total_returns > 0 %}var(--success){% elif analytics.data.total_returns < 0 %}var(--danger){% else %}var(--text-secondary){% endif %}">
+                {{ analytics.data.total_returns|currency }}
+            </div>
+            <div class="metric-change">
+                {% if analytics.data.total_returns > 0 %}
+                +{{ (analytics.data.total_returns / analytics.data.total_invested * 100)|round(2) }}%
+                {% else %}
+                {{ (analytics.data.total_returns / analytics.data.total_invested * 100)|round(2) }}%
+                {% endif %}
+            </div>
         </div>
     </div>
 
-    <!-- Upcoming SIPs -->
-    {% if upcoming and upcoming.upcoming_sips %}
+    <!-- Active SIPs -->
+    {% if active_sips %}
     <div class="card">
         <div class="card-header">
-            <h3 class="card-title">Upcoming SIP Installments</h3>
-            <p style="color: var(--text-muted); font-size: 0.875rem;">Next 30 days</p>
+            <h3 class="card-title">Active SIPs</h3>
+            <p style="color: var(--text-muted); font-size: 0.875rem;">{{ active_sips|length }} active systematic investment plans</p>
         </div>
 
         <div class="table-container">
             <table>
                 <thead>
                     <tr>
-                        <th>Scheme Name</th>
-                        <th>Amount</th>
-                        <th>Date</th>
-                        <th>Days Until</th>
-                        <th>Broker</th>
+                        <th style="width: 30%;">Scheme Name</th>
+                        <th>SIP Amount</th>
+                        <th>Frequency</th>
+                        <th>Total Invested</th>
+                        <th>Current Value</th>
+                        <th>Returns</th>
+                        <th>Returns %</th>
+                        <th>XIRR %</th>
+                        <th>Last Date</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for sip in upcoming.upcoming_sips %}
+                    {% for sip in active_sips %}
                     <tr>
-                        <td>{{ sip.scheme_name|truncate_text(50) }}</td>
-                        <td>{{ sip.sip_amount|currency }}</td>
-                        <td>{{ sip.date }}</td>
                         <td>
-                            <span
-                                class="{% if sip.days_until <= 3 %}text-danger{% elif sip.days_until <= 7 %}text-warning{% else %}text-success{% endif %}">
-                                {{ sip.days_until }} days
-                            </span>
+                            <div class="scheme-name" title="{{ sip.scheme_name }}">
+                                {{ sip.scheme_name }}
+                            </div>
+                            <span class="folio-number">{{ sip.folio_number }}</span>
                         </td>
-                        <td>{{ sip.broker }}</td>
+                        <td>{{ sip.sip_amount|currency }}</td>
+                        <td>{{ sip.frequency }}</td>
+                        <td>{{ sip.total_invested_sip|currency }}</td>
+                        <td><strong>{{ sip.current_value|currency }}</strong></td>
+                        <td style="color: {% if sip.absolute_returns > 0 %}var(--success){% elif sip.absolute_returns < 0 %}var(--danger){% else %}var(--text-secondary){% endif %}">
+                            {{ sip.absolute_returns|currency }}
+                        </td>
+                        <td style="color: {% if sip.returns_percent > 0 %}var(--success){% elif sip.returns_percent < 0 %}var(--danger){% else %}var(--text-secondary){% endif %}">
+                            {{ sip.returns_percent|percentage }}
+                        </td>
+                        <td style="color: {% if sip.xirr > 0 %}var(--success){% elif sip.xirr < 0 %}var(--danger){% else %}var(--text-secondary){% endif %}">
+                            {{ sip.xirr|percentage }}
+                        </td>
+                        <td style="font-size: 0.875rem;">{{ sip.last_installment_date }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -71,39 +99,40 @@
     </div>
     {% endif %}
 
-    <!-- All SIPs -->
-    {% if sips %}
+    <!-- Inactive SIPs -->
+    {% if inactive_sips %}
     <div class="card">
         <div class="card-header">
-            <h3 class="card-title">All SIPs</h3>
-            <p style="color: var(--text-muted); font-size: 0.875rem;">{{ sips|length }} total</p>
+            <h3 class="card-title">Inactive SIPs</h3>
+            <p style="color: var(--text-muted); font-size: 0.875rem;">{{ inactive_sips|length }} stopped or completed SIPs</p>
         </div>
 
         <div class="table-container">
             <table>
                 <thead>
                     <tr>
-                        <th>Scheme Name</th>
+                        <th style="width: 30%;">Scheme Name</th>
                         <th>SIP Amount</th>
                         <th>Frequency</th>
-                        <th>Last Installment</th>
-                        <th>Broker</th>
-                        <th>Status</th>
+                        <th>Total Invested</th>
+                        <th>Installments</th>
+                        <th>Last Date</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for sip in sips %}
-                    <tr>
-                        <td>{{ sip.scheme_name|truncate_text(50) }}</td>
+                    {% for sip in inactive_sips %}
+                    <tr style="opacity: 0.7;">
+                        <td>
+                            <div class="scheme-name" title="{{ sip.scheme_name }}">
+                                {{ sip.scheme_name }}
+                            </div>
+                            <span class="folio-number">{{ sip.folio_number }}</span>
+                        </td>
                         <td>{{ sip.sip_amount|currency }}</td>
                         <td>{{ sip.frequency }}</td>
-                        <td>{{ sip.last_installment_date }}</td>
-                        <td>{{ sip.broker }}</td>
-                        <td>
-                            <span style="color: {% if sip.is_active %}var(--success){% else %}var(--danger){% endif %}">
-                                {% if sip.is_active %}Active{% else %}Inactive{% endif %}
-                            </span>
-                        </td>
+                        <td>{{ sip.total_invested_sip|currency }}</td>
+                        <td>{{ sip.total_installments }}</td>
+                        <td style="font-size: 0.875rem;">{{ sip.last_installment_date }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>

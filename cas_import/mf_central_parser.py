@@ -174,7 +174,17 @@ class MFCentralParser:
         return aggregated_holdings, aggregation_map
     
     def identify_active_sips(self, transactions: List[Dict]) -> List[Dict]:
-        """Identify active SIPs from transaction patterns"""
+        """
+        Identify active SIPs from transaction patterns.
+        
+        Assumptions:
+        - All SIPs are Monthly (standard in India)
+        - Grace period: 90 days (30 days interval + 60 days buffer)
+        
+        A SIP is considered ACTIVE if:
+        - Last installment was within the last 90 days
+        - This handles delayed payments, bank holidays, and temporary pauses
+        """
         
         # Group SIP transactions by scheme + folio (unique combination)
         sip_groups = {}
@@ -194,66 +204,70 @@ class MFCentralParser:
                 sip_groups[key]['transactions'].append(txn)
         
         # Analyze each SIP group
-        active_sips = []
+        all_sips = []
         
         for key, group in sip_groups.items():
             txns = group['transactions']
             if not txns:
                 continue
             
-            # Filter out None dates and sort
+            # Filter out None dates and sort by date
             valid_txns = [t for t in txns if t.get('trade_date') is not None]
             if not valid_txns:
                 continue
                 
             valid_txns.sort(key=lambda x: x['trade_date'])
             
-            # Get last transaction date
+            # Get first and last transaction
+            first_txn = valid_txns[0]
             last_txn = valid_txns[-1]
+            first_date = first_txn['trade_date']
             last_date = last_txn['trade_date']
             
-            # Consider active if last SIP was within 60 days
-            cutoff_date = date.today() - timedelta(days=60)
+            # Calculate total invested and most recent SIP amount
+            amounts = [abs(float(t['amount'])) for t in valid_txns if t.get('amount')]
+            total_invested = sum(amounts)
             
-            if last_date >= cutoff_date:
-                # Calculate frequency
-                amounts = [abs(float(t['amount'])) for t in valid_txns if t.get('amount')]
-                avg_amount = sum(amounts) / len(amounts) if amounts else 0
-                
-                # Determine frequency from transaction intervals
-                if len(valid_txns) >= 2:
-                    intervals = []
-                    for i in range(1, min(len(valid_txns), 6)):
-                        delta = (valid_txns[i]['trade_date'] - valid_txns[i-1]['trade_date']).days
-                        intervals.append(delta)
-                    
-                    avg_interval = sum(intervals) / len(intervals) if intervals else 30
-                    
-                    if avg_interval < 10:
-                        frequency = 'Weekly'
-                    elif avg_interval < 20:
-                        frequency = 'Bi-weekly'
-                    elif avg_interval < 35:
-                        frequency = 'Monthly'
-                    elif avg_interval < 95:
-                        frequency = 'Quarterly'
-                    else:
-                        frequency = 'Yearly'
-                else:
-                    frequency = 'Monthly'  # Default
-                
-                active_sips.append({
-                    'scheme_name': group['scheme_name'],
-                    'folio_number': group['folio_number'],
-                    'sip_amount': round(avg_amount, 2),
-                    'frequency': frequency,
-                    'last_installment_date': last_date,
-                    'total_installments': len(valid_txns),
-                    'total_invested': sum(amounts),
-                    'broker': last_txn.get('broker', 'Unknown')
-                })
+            # Use the most recent SIP amount, not average
+            recent_amount = abs(float(last_txn['amount'])) if last_txn.get('amount') else 0
+            
+            # All SIPs are assumed to be Monthly (standard in India)
+            frequency = 'Monthly'
+            expected_interval_days = 30
+            
+            # Improved active SIP logic:
+            # A SIP is considered ACTIVE if the next expected installment is not overdue by more than 90 days
+            # Grace period = 30 days (monthly interval) + 60 days buffer = 90 days total
+            # This handles:
+            # 1. Monthly SIPs that might be delayed by a few days
+            # 2. Bank holidays and processing delays
+            # 3. SIPs that are paused temporarily but not cancelled
+            
+            days_since_last = (date.today() - last_date).days
+            
+            # Fixed grace period for monthly SIPs: 90 days
+            grace_period = 90
+            
+            # SIP is active if it's not overdue by more than the grace period
+            is_active = days_since_last <= grace_period
+            
+            sip_data = {
+                'scheme_name': group['scheme_name'],
+                'folio_number': group['folio_number'],
+                'sip_amount': round(recent_amount, 2),
+                'frequency': frequency,
+                'first_installment_date': first_date,
+                'last_installment_date': last_date,
+                'total_installments': len(valid_txns),
+                'total_invested': round(total_invested, 2),
+                'broker': last_txn.get('broker', 'Unknown'),
+                'is_active': is_active,
+                'days_since_last_installment': days_since_last
+            }
+            
+            all_sips.append(sip_data)
         
-        return active_sips
+        return all_sips
     
     def extract_broker_info(self, transactions: List[Dict]) -> Dict[str, Dict]:
         """
@@ -414,14 +428,38 @@ class MFCentralParser:
         return broker_str.strip()
     
     def _normalize_scheme_name(self, scheme_name: str) -> str:
-        """Normalize scheme name for grouping"""
+        """
+        Normalize scheme name for grouping and deduplication.
+        Handles variations in plan types, growth options, and naming conventions.
+        """
         # Remove common suffixes and variations
         normalized = scheme_name.lower()
-        normalized = re.sub(r'\s*-\s*(regular|direct)\s*-?\s*', ' ', normalized)
+        
+        # Remove plan type variations (Regular/Direct)
+        normalized = re.sub(r'\s*-?\s*(regular|direct)\s*plan\s*-?\s*', ' ', normalized)
+        normalized = re.sub(r'\s*-?\s*(regular|direct)\s*-?\s*', ' ', normalized)
+        
+        # Remove growth variations
         normalized = re.sub(r'\s*-\s*growth\s*plan\s*', ' ', normalized)
         normalized = re.sub(r'\s*-\s*growth\s*', ' ', normalized)
-        normalized = re.sub(r'\s*\(.*?\)\s*', ' ', normalized)  # Remove parentheses
+        normalized = re.sub(r'\bgrowth\b', '', normalized)
+        
+        # Remove parenthetical text (e.g., "(erstwhile XYZ)")
+        normalized = re.sub(r'\s*\(.*?\)\s*', ' ', normalized)
+        
+        # Remove "formerly known as" text
+        normalized = re.sub(r'\s*formerly\s+known\s+as\s+.*$', '', normalized)
+        
+        # Remove common abbreviations and normalize
+        normalized = re.sub(r'\bfund\s*-?\s*', '', normalized)
+        normalized = re.sub(r'\breg\s+pl\b', '', normalized)
+        normalized = re.sub(r'\breg\b', '', normalized)
+        normalized = re.sub(r'\bdp\b', '', normalized)
+        
+        # Remove extra dashes and spaces
+        normalized = re.sub(r'\s*-\s*', ' ', normalized)
         normalized = re.sub(r'\s+', ' ', normalized).strip()
+        
         return normalized
     
     def _aggregate_holdings_group(self, group: List[Dict]) -> Dict:

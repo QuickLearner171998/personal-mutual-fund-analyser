@@ -128,3 +128,27 @@ async function handleAPIError(error, defaultMessage = 'An error occurred') {
     const message = error.message || defaultMessage;
     showToast(message, 'error');
 }
+
+// Toggle folio details for aggregated holdings
+function toggleFolioDetails(holdingId) {
+    const icon = document.querySelector(`[data-holding-id="${holdingId}"] .expand-icon`);
+    const detailRows = document.querySelectorAll(`[id^="detail-${holdingId}-"]`);
+    
+    if (!icon || detailRows.length === 0) return;
+    
+    const isExpanded = icon.textContent.trim() === '▼';
+    
+    if (isExpanded) {
+        // Collapse
+        icon.textContent = '▶';
+        detailRows.forEach(row => {
+            row.style.display = 'none';
+        });
+    } else {
+        // Expand
+        icon.textContent = '▼';
+        detailRows.forEach(row => {
+            row.style.display = 'table-row';
+        });
+    }
+}

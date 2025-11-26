@@ -7,6 +7,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from typing import Dict, List, Tuple
+from collections import defaultdict
+import re
 from cas_import.excel_parser import parse_mf_central_excel
 from cas_import.mf_central_parser import MFCentralParser
 
@@ -105,32 +107,52 @@ def process_mf_central_complete(
     return portfolio_data
 
 
-def _enrich_holdings_with_broker(holdings: List[Dict], transactions: List[Dict]) -> List[Dict]:
-    """Add broker information to holdings from transaction history"""
+def extract_base_folio(folio: str) -> str:
+    """
+    Extract base folio number from folio string.
+    Handles suffixes like '20920295/55' -> '20920295'
+    """
+    if not folio:
+        return ''
     
-    # Build broker map from transactions (scheme + folio -> broker)
+    # Remove suffix after '/'
+    base = str(folio).split('/')[0].strip()
+    return base
+
+
+def _enrich_holdings_with_broker(holdings: List[Dict], transactions: List[Dict]) -> List[Dict]:
+    """
+    Add broker information to holdings from transaction history.
+    Matches using folio number (with base folio extraction).
+    """
+    
+    # Build broker map from transactions (base_folio -> broker)
+    # Use base folio as key to handle folio suffixes
     broker_map = {}
     for txn in transactions:
         if txn.get('broker') and txn['broker'] != 'Unknown':
-            key = (txn['scheme_name'], txn['folio_number'])
-            if key not in broker_map:
-                broker_map[key] = txn['broker']
+            base_folio = extract_base_folio(txn['folio_number'])
+            if base_folio and base_folio not in broker_map:
+                broker_map[base_folio] = txn['broker']
     
     # Enrich holdings
     for holding in holdings:
-        # Try exact match first
-        key = (holding['scheme_name'], holding['folio_number'])
-        if key in broker_map:
-            holding['broker'] = broker_map[key]
+        base_folio = extract_base_folio(holding['folio_number'])
+        
+        # Try base folio match
+        if base_folio in broker_map:
+            holding['broker'] = broker_map[base_folio]
         else:
-            # Try fuzzy match on scheme name
-            for (txn_scheme, txn_folio), broker in broker_map.items():
-                if (txn_folio == holding['folio_number'] and 
-                    _schemes_match(txn_scheme, holding['scheme_name'])):
-                    holding['broker'] = broker
-                    break
+            # Try fuzzy match on scheme name as fallback
+            for txn in transactions:
+                if txn.get('broker') and txn['broker'] != 'Unknown':
+                    if _schemes_match(txn['scheme_name'], holding['scheme_name']):
+                        holding['broker'] = txn['broker']
+                        break
             else:
-                holding['broker'] = 'Unknown'
+                # Don't set broker if not found
+                if 'broker' not in holding:
+                    holding['broker'] = None
     
     return holdings
 
@@ -181,6 +203,182 @@ def _calculate_portfolio_xirr(holdings: List[Dict]) -> float:
     ) / total_value
     
     return round(weighted_xirr, 2)
+
+
+def _normalize_scheme_for_grouping(scheme_name: str) -> str:
+    """
+    Normalize scheme name for grouping duplicate funds.
+    Uses similar logic as MFCentralParser but more aggressive.
+    """
+    normalized = scheme_name.lower()
+    
+    # Remove plan type variations
+    normalized = re.sub(r'\s*-?\s*(regular|direct)\s*plan\s*-?\s*', ' ', normalized)
+    normalized = re.sub(r'\s*-?\s*(regular|direct)\s*-?\s*', ' ', normalized)
+    
+    # Remove growth variations
+    normalized = re.sub(r'\s*-\s*growth\s*plan\s*', ' ', normalized)
+    normalized = re.sub(r'\s*-\s*growth\s*', ' ', normalized)
+    normalized = re.sub(r'\bgrowth\b', '', normalized)
+    
+    # Remove parenthetical text
+    normalized = re.sub(r'\s*\(.*?\)\s*', ' ', normalized)
+    
+    # Remove "formerly known as"
+    normalized = re.sub(r'\s*formerly\s+known\s+as\s+.*$', '', normalized)
+    
+    # Normalize abbreviations
+    normalized = re.sub(r'\bfund\s*-?\s*', '', normalized)
+    normalized = re.sub(r'\breg\s+pl\b', '', normalized)
+    normalized = re.sub(r'\breg\b', '', normalized)
+    normalized = re.sub(r'\bdp\b', '', normalized)
+    
+    # Clean up
+    normalized = re.sub(r'\s*-\s*', ' ', normalized)
+    normalized = re.sub(r'\s+', ' ', normalized).strip()
+    
+    return normalized
+
+
+def aggregate_holdings_for_display(holdings: List[Dict]) -> Tuple[List[Dict], Dict]:
+    """
+    Aggregate holdings by normalized scheme name for display.
+    Returns: (aggregated_holdings, aggregation_map)
+    
+    Each aggregated holding has:
+    - All aggregated financial values (summed)
+    - Weighted average XIRR
+    - List of individual folio details for expansion
+    - Flag indicating if it's aggregated
+    """
+    # Group by normalized scheme name
+    scheme_groups = defaultdict(list)
+    
+    for holding in holdings:
+        normalized_name = _normalize_scheme_for_grouping(holding['scheme_name'])
+        scheme_groups[normalized_name].append(holding)
+    
+    aggregated_holdings = []
+    aggregation_map = {}
+    
+    for normalized_name, group in scheme_groups.items():
+        if len(group) == 1:
+            # No aggregation needed
+            holding = group[0].copy()
+            holding['is_aggregated'] = False
+            holding['folio_count'] = 1
+            holding['individual_folios'] = []
+            aggregated_holdings.append(holding)
+        else:
+            # Aggregate multiple folios
+            aggregated = _aggregate_holdings_group(group)
+            aggregated['is_aggregated'] = True
+            aggregated['folio_count'] = len(group)
+            aggregated['individual_folios'] = group
+            aggregated_holdings.append(aggregated)
+            
+            # Store aggregation info
+            aggregation_map[normalized_name] = {
+                'original_count': len(group),
+                'folios': [h['folio_number'] for h in group],
+                'display_scheme_name': group[0]['scheme_name']
+            }
+    
+    return aggregated_holdings, aggregation_map
+
+
+def _aggregate_holdings_group(group: List[Dict]) -> Dict:
+    """
+    Aggregate a group of holdings into one summary.
+    Calculates weighted average XIRR based on current values.
+    """
+    # Start with first holding as template
+    aggregated = group[0].copy()
+    
+    # Sum numerical fields
+    aggregated['units'] = sum(h.get('units', 0) for h in group)
+    aggregated['current_value'] = sum(h.get('current_value', 0) for h in group)
+    aggregated['cost_value'] = sum(h.get('cost_value', 0) for h in group)
+    aggregated['gain_loss'] = aggregated['current_value'] - aggregated['cost_value']
+    
+    # Recalculate percentages
+    aggregated['gain_loss_percent'] = (
+        (aggregated['gain_loss'] / aggregated['cost_value'] * 100)
+        if aggregated['cost_value'] > 0 else 0
+    )
+    
+    # Calculate weighted average XIRR
+    total_value = aggregated['current_value']
+    if total_value > 0:
+        weighted_xirr = sum(
+            h.get('xirr', 0) * h.get('current_value', 0)
+            for h in group
+        ) / total_value
+        aggregated['xirr'] = round(weighted_xirr, 2)
+    else:
+        aggregated['xirr'] = 0.0
+    
+    # Recalculate current NAV
+    aggregated['current_nav'] = (
+        aggregated['current_value'] / aggregated['units']
+        if aggregated['units'] > 0 else 0
+    )
+    
+    # Use most recent NAV date
+    nav_dates = [h.get('nav_date') for h in group if h.get('nav_date')]
+    if nav_dates:
+        aggregated['nav_date'] = max(nav_dates)
+    
+    # Create combined folio display
+    folios = [h['folio_number'] for h in group]
+    aggregated['folio_number'] = f"{folios[0]} (+{len(folios)-1} more)"
+    
+    return aggregated
+
+
+def match_sips_with_holdings(sips: List[Dict], holdings: List[Dict]) -> List[Dict]:
+    """
+    Match SIP data with holdings to add performance metrics.
+    Returns enriched SIP list with XIRR, returns, and current value.
+    """
+    # Build holding lookup map (base_folio + normalized_scheme -> holding)
+    holding_map = {}
+    for holding in holdings:
+        base_folio = extract_base_folio(holding['folio_number'])
+        normalized_scheme = _normalize_scheme_for_grouping(holding['scheme_name'])
+        key = (base_folio, normalized_scheme)
+        holding_map[key] = holding
+    
+    enriched_sips = []
+    for sip in sips.copy():
+        base_folio = extract_base_folio(sip['folio_number'])
+        normalized_scheme = _normalize_scheme_for_grouping(sip['scheme_name'])
+        key = (base_folio, normalized_scheme)
+        
+        # Try to find matching holding
+        holding = holding_map.get(key)
+        
+        if holding:
+            # Add performance metrics from holding
+            sip['xirr'] = holding.get('xirr', 0.0)
+            sip['current_value'] = holding.get('current_value', 0.0)
+            sip['total_invested_sip'] = sip.get('total_invested', 0.0)
+            sip['absolute_returns'] = sip['current_value'] - sip['total_invested_sip']
+            sip['returns_percent'] = (
+                (sip['absolute_returns'] / sip['total_invested_sip'] * 100)
+                if sip['total_invested_sip'] > 0 else 0.0
+            )
+        else:
+            # No matching holding found (SIP might be redeemed)
+            sip['xirr'] = 0.0
+            sip['current_value'] = 0.0
+            sip['total_invested_sip'] = sip.get('total_invested', 0.0)
+            sip['absolute_returns'] = 0.0
+            sip['returns_percent'] = 0.0
+        
+        enriched_sips.append(sip)
+    
+    return enriched_sips
 
 
 if __name__ == "__main__":

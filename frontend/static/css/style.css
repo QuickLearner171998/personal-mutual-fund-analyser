@@ -343,6 +343,60 @@ tbody tr:hover {
   background: var(--bg-tertiary);
 }
 
+/* Expandable Row Styles */
+.aggregated-row {
+  font-weight: 500;
+}
+
+.expand-icon {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  line-height: 20px;
+  text-align: center;
+  color: var(--primary);
+  font-size: 0.75rem;
+  transition: transform var(--transition-fast);
+}
+
+.folio-detail-row {
+  background: rgba(99, 102, 241, 0.05);
+  border-left: 3px solid var(--primary);
+}
+
+.folio-detail-row:hover {
+  background: rgba(99, 102, 241, 0.08);
+}
+
+/* Scheme Name Display */
+.scheme-name {
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.4;
+  margin-bottom: 0.25rem;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.folio-badge {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  background: var(--primary);
+  color: white;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-top: 0.25rem;
+}
+
+.folio-number {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-family: 'Monaco', 'Courier New', monospace;
+  margin-top: 0.125rem;
+}
+
 /* ==================== Utility Classes ==================== */
 .text-center { text-align: center; }
 .text-right { text-align: right; }

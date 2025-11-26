@@ -58,7 +58,7 @@ class MultiAgentOrchestrator:
         
         combined_agent_outputs = "\n\n---\n\n".join(agent_outputs)
         
-        synthesis_prompt = f"""You are an expert financial advisor synthesizing multiple analyses into ONE cohesive response.
+        synthesis_prompt = f"""You are a financial advisor synthesizing multiple analyses into ONE brief, focused response.
 
 **User's Question:**
 {query}
@@ -68,28 +68,20 @@ class MultiAgentOrchestrator:
 {combined_agent_outputs}
 
 **Your Task:**
-Synthesize into a single, well-formatted response that:
-1. Directly answers the user's question
-2. Integrates insights from all agents seamlessly  
-3. Removes redundancies and contradictions
-4. Presents information in logical order
-5. Maintains all specific data and recommendations
-6. Flows naturally as ONE expert opinion (not multiple agents)
+Synthesize into a CONCISE, well-organized response that:
+1. Directly answers the user's question first
+2. Integrates insights from all agents seamlessly
+3. Removes redundancies
+4. Keeps it BRIEF - only essential information
+5. Uses markdown formatting (headers, bullets, tables where needed)
+6. Presents as ONE expert opinion (never mention "Agent X")
 
-**FORMATTING REQUIREMENTS:**
-- Use clear markdown headers (##, ###)
-- Use tables for numerical data
+**IMPORTANT - Keep it SHORT:**
+- Answer the question directly in 1-2 paragraphs if possible
+- Only add detailed sections if the query requires it
 - Use bullet points for lists
-- Use bold (**text**) for emphasis
-- Add emojis (📊, 💰, ⚠️, ✅) for visual appeal
-- Use horizontal rules (---) to separate sections
-- Keep paragraphs short and readable
-
-**IMPORTANT:**
-- DO NOT mention "Agent X says" or "According to Agent Y"
-- Write as if YOU are the expert who analyzed everything
-- Be direct, actionable, and easy to understand
-- Include all important numbers and percentages
+- Use tables only when comparing multiple items
+- NO unnecessary elaboration or generic advice
 
 **Synthesized Response:**"""
 
@@ -175,7 +167,8 @@ Synthesize into a single, well-formatted response that:
                     logger.info(f"{agent_name.upper()} AGENT COMPLETED (took {agent_time:.2f}s)")
                     logger.info("=" * 60)
                     
-                    # Format response (only if not streaming)
+                    # For single-agent queries, return response directly (no synthesis needed)
+                    # This preserves the concise, direct answers from portfolio agent
                     if not stream and isinstance(response, str):
                         response = format_response(response)
                     
