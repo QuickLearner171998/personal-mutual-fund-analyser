@@ -1,8 +1,18 @@
 """
 Intent Classifier - Routes queries to appropriate agents
+Uses dedicated GPT-4.1 LLM for intent classification
 """
+import sys
+from pathlib import Path
+
+# Add parent directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from llm.llm_wrapper import invoke_llm
 from typing import List, Dict
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 class IntentClassifier:
     def __init__(self):
@@ -13,14 +23,20 @@ class IntentClassifier:
             'comparison': 'Comparing different mutual funds',
             'strategy': 'Rebalancing, risk assessment, tax optimization, investment strategy'
         }
+        logger.info("IntentClassifier initialized with dedicated GPT-4.1 model")
     
     def classify(self, query: str) -> List[str]:
         """
-        Classify user query to one or more agent intents
+        Classify user query to one or more agent intents using dedicated GPT-4.1 LLM
+        
+        Args:
+            query: User's question
         
         Returns:
             List of intents (can be multiple for complex queries)
         """
+        logger.info(f"Classifying query: '{query}'")
+        
         intent_descriptions = "\n".join([f"- {k}: {v}" for k, v in self.intents.items()])
         
         messages = [
@@ -44,7 +60,11 @@ If multiple intents are needed, include all relevant ones.
         ]
         
         try:
-            response = invoke_llm(messages)
+            logger.info("Invoking dedicated Intent Classification LLM (GPT-4.1)")
+            # Use use_intent=True to force dedicated intent classification model
+            response = invoke_llm(messages, use_intent=True)
+            
+            logger.info(f"Intent LLM response: '{response}'")
             
             # Parse response (should be like "portfolio,strategy")
             intents = [intent.strip() for intent in response.split(',')]
@@ -54,13 +74,15 @@ If multiple intents are needed, include all relevant ones.
             
             # Default to portfolio if nothing matched
             if not valid_intents:
+                logger.warning(f"No valid intents found in response: '{response}', defaulting to 'portfolio'")
                 valid_intents = ['portfolio']
             
-            print(f"🎯 Classified query as: {', '.join(valid_intents)}")
+            logger.info(f"Classified intents: {', '.join(valid_intents)}")
+            
             return valid_intents
             
         except Exception as e:
-            print(f"Intent classification error: {e}, defaulting to 'portfolio'")
+            logger.error(f"Intent classification error: {str(e)}, defaulting to 'portfolio'")
             return ['portfolio']
 
 
@@ -78,4 +100,4 @@ if __name__ == "__main__":
     
     for q in test_queries:
         intents = classifier.classify(q)
-        print(f"Q: {q}\nA: {intents}\n")
+        logger.info(f"Query: {q} | Intents: {intents}")

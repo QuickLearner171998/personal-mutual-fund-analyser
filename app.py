@@ -6,6 +6,11 @@ from flask import Flask, render_template, request, jsonify, redirect, url_for, f
 import os
 import sys
 
+# Import centralized logger FIRST
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
+
 from core.unified_processor import process_mf_central_complete
 from database.json_store import PortfolioStore
 from vector_db.portfolio_indexer import index_portfolio_data
@@ -14,9 +19,13 @@ from agents.orchestrator import MultiAgentOrchestrator
 app = Flask(__name__, template_folder='frontend/templates', static_folder='frontend/static')
 app.config['SECRET_KEY'] = os.urandom(24)
 
+logger.info("Initializing Flask application")
+
 # Initialize components
 store = PortfolioStore()
 orchestrator = MultiAgentOrchestrator()
+
+logger.info("Components initialized successfully")
 
 # Upload directory
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
@@ -88,9 +97,11 @@ def upload():
             
             # Index for vector search
             try:
+                logger.info("Starting vector indexing")
                 index_portfolio_data(portfolio_data)
+                logger.info("Vector indexing completed")
             except Exception as e:
-                print(f"Vector indexing failed: {e}")
+                logger.warning(f"Vector indexing failed: {e}")
             
             flash(f'Successfully processed {portfolio_data.get("num_funds", 0)} funds!', 'success')
             return redirect(url_for('dashboard'))
@@ -173,13 +184,19 @@ def chat():
         message = request.form.get('message')
         if message:
             try:
+                logger.info(f"Received chat message: '{message}'")
+                
                 # Check if portfolio data exists
                 portfolio = store.get_portfolio()
                 if not portfolio:
+                    logger.warning("No portfolio data found")
                     return jsonify({'error': 'No portfolio data found. Please upload files first.'}), 404
                 
+                logger.info("Processing query through orchestrator")
                 # Get response from AI
                 response = orchestrator.process_query(message)
+                
+                logger.info(f"Response generated: {len(response)} characters")
                 
                 # Save to history (in-memory for now)
                 if not hasattr(app, 'chat_history'):
@@ -197,8 +214,10 @@ def chat():
                     'timestamp': datetime.now()
                 })
                 
+                logger.info("Chat response sent successfully")
                 return jsonify({'response': response})
             except Exception as e:
+                logger.error(f"Chat error: {str(e)}")
                 return jsonify({'error': str(e)}), 500
     
     # Get chat history

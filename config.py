@@ -21,8 +21,11 @@ PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
 # Primary LLM (for general tasks with reasoning)
 PRIMARY_LLM_MODEL = os.getenv("PRIMARY_LLM_MODEL", "gpt-5")
 
-# Fast LLM for RAG and quick queries
+# Fast LLM for RAG and quick queries (also used for intent classification)
 RAG_LLM_MODEL = os.getenv("RAG_LLM_MODEL", "gpt-4.1-mini")
+
+# Intent Classification Model (GPT-4.1 for accuracy)
+INTENT_CLASSIFICATION_MODEL = os.getenv("INTENT_CLASSIFICATION_MODEL", "gpt-4.1")
 
 # Advanced reasoning LLM (for complex thinking)
 REASONING_LLM_MODEL = os.getenv("REASONING_LLM_MODEL", "gpt-5")

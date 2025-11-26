@@ -219,3 +219,8 @@ tasks*
 *.json
 *.xlsx
 
+# Application logs
+logs/
+*.log
+flask_app.log
+debug_main.log
