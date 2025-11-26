@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}Upload Data - MF Portfolio Analyzer{% endblock %}
+
+{% block content %}
+<div>
+    <div style="margin-bottom: 2rem;">
+        <h1>Upload MF Central Files</h1>
+        <p style="color: var(--text-secondary);">Upload your portfolio files to get started</p>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    {% for category, message in messages %}
+    <div class="card"
+        style="background: {% if category == 'success' %}var(--success){% else %}var(--danger){% endif %}; color: white; margin-bottom: 1rem;">
+        {{ message }}
+    </div>
+    {% endfor %}
+    {% endif %}
+    {% endwith %}
+
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Required Files</h3>
+        </div>
+
+        <form method="POST" enctype="multipart/form-data">
+            <div class="form-group">
+                <label class="form-label">1. Excel Detailed Report</label>
+                <input type="file" name="excel_file" class="form-control" accept=".xlsx,.xls" required>
+                <p style="color: var(--text-muted); font-size: 0.875rem; margin-top: 0.5rem;">
+                    Download from: MF Central → Reports → Detailed Report
+                </p>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">2. Transaction Details JSON</label>
+                <input type="file" name="transaction_json" class="form-control" accept=".json" required>
+                <p style="color: var(--text-muted); font-size: 0.875rem; margin-top: 0.5rem;">
+                    File name pattern: AS*.json<br>
+                    Download from: MF Central → Transactions → Transaction Details Statement
+                </p>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">3. XIRR JSON</label>
+                <input type="file" name="xirr_json" class="form-control" accept=".json" required>
+                <p style="color: var(--text-muted); font-size: 0.875rem; margin-top: 0.5rem;">
+                    File name pattern: *IMBPF*.json<br>
+                    Download from: MF Central → Reports → Detailed Report (XIRR file)
+                </p>
+            </div>
+
+            <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+                <button type="submit" class="btn btn-primary">
+                    Upload and Process Files
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Instructions Card -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">How to Get These Files</h3>
+        </div>
+
+        <div style="line-height: 1.8;">
+            <h4 style="color: var(--primary); margin-bottom: 1rem;">Step 1: Excel Report</h4>
+            <ol style="color: var(--text-secondary); margin-bottom: 2rem;">
+                <li>Go to MF Central website</li>
+                <li>Navigate to Reports → Detailed Report</li>
+                <li>Download the Excel file</li>
+            </ol>
+
+            <h4 style="color: var(--primary); margin-bottom: 1rem;">Step 2: Transaction JSON</h4>
+            <ol style="color: var(--text-secondary); margin-bottom: 2rem;">
+                <li>Go to MF Central → Transactions</li>
+                <li>Download Transaction Details Statement</li>
+                <li>Extract the ZIP and find AS*.json</li>
+            </ol>
+
+            <h4 style="color: var(--primary); margin-bottom: 1rem;">Step 3: XIRR JSON</h4>
+            <ol style="color: var(--text-secondary);">
+                <li>From the same Detailed Report download</li>
+                <li>Extract and find the *IMBPF*.json file</li>
+            </ol>
+        </div>
+    </div>
+</div>
+{% endblock %}

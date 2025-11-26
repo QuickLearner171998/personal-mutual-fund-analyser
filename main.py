@@ -1,287 +1,177 @@
-#!/usr/bin/env python3
 """
-Main test runner for MF Portfolio Analyzer
-Tests all components and runs business logic without UI
+Main Debug/Test Runner
+Tests backend processing and displays responses for debugging
 """
 import sys
+import json
 from pathlib import Path
 
-# Add current directory to path
+# Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from core.portfolio_processor import (
-    load_mf_central_files,
-    validate_mf_central_data,
-    process_mf_central_data,
-    get_portfolio_summary,
-    get_transaction_summary,
-    load_portfolio_from_db,
-    check_sample_files_exist
-)
+print("=" * 80)
+print("MF PORTFOLIO ANALYZER - DEBUG MODE")
+print("=" * 80)
+print()
 
+# Test 1: Import all modules
+print("▶ Testing Imports...")
+try:
+    from core.unified_processor import process_mf_central_complete
+    from database.json_store import PortfolioStore
+    from vector_db.portfolio_indexer import index_portfolio_data
+    from agents.coordinator import IntentClassifier
+    print("✅ All imports successful")
+except Exception as e:
+    print(f"❌ Import failed: {str(e)}")
+    sys.exit(1)
 
-def test_imports():
-    """Test all critical imports"""
-    print("=" * 80)
-    print("IMPORT TEST")
-    print("=" * 80)
-    
-    try:
-        # Core imports
-        print("\n1. Testing core imports...")
-        import config
-        from database.json_store import PortfolioStore
-        from cas_import.mf_central_parser import MFCentralParser
-        from calculations.returns import calculate_cagr, calculate_allocation
-        print("   ✓ Core imports successful")
-        
-        # UI imports
-        print("\n2. Testing UI imports...")
-        try:
-            from ui.dashboard import render_dashboard
-            from ui.sip_analytics import render_sip_dashboard
-            from ui.cas_upload import render_upload_page
-            from ui.chat import render_chat
-            print("   ✓ UI imports successful")
-        except ImportError as e:
-            print(f"   ⚠️  UI import warning: {str(e)}")
-            print("   (This is OK if Streamlit is not installed)")
-        
-        # Agent imports
-        print("\n3. Testing agent imports...")
-        from agents.coordinator import IntentClassifier
-        from agents.portfolio_agent import PortfolioAgent
-        from llm.llm_wrapper import invoke_llm
-        print("   ✓ Agent imports successful")
-        
-        # Vector DB imports
-        print("\n4. Testing vector DB imports...")
-        from vector_db.portfolio_indexer import index_portfolio_data
-        from vector_db.faiss_store import LocalVectorStore
-        print("   ✓ Vector DB imports successful")
-        
-        return True
-        
-    except Exception as e:
-        print(f"\n✗ Import Error: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return False
+print()
 
+# Test 2: Process MF Central files
+print("▶ Processing MF Central Files...")
+print("  Files:")
+print("    - Excel: cas_detailed_report_2025_11_26_004753.xlsx")
+print("    - Transaction JSON: CCJN4KTLB310840997771IMBAS199068013/AS199068013.json")
+print("    - XIRR JSON: 70910727520211641ZF683740997FF11IMBPF199067986.json")
+print()
 
-def test_mf_central_parser():
-    """Test MF Central parser with sample data"""
-    print("\n" + "=" * 80)
-    print("MF CENTRAL PARSER TEST")
-    print("=" * 80)
+try:
+    portfolio_data = process_mf_central_complete(
+        'cas_detailed_report_2025_11_26_004753.xlsx',
+        'CCJN4KTLB310840997771IMBAS199068013/AS199068013.json',
+        '70910727520211641ZF683740997FF11IMBPF199067986.json'
+    )
     
-    # Check if sample files exist
-    files_exist, missing = check_sample_files_exist()
+    print("✅ Processing successful")
+    print()
+    print("PORTFOLIO SUMMARY:")
+    print(f"  Investor: {portfolio_data.get('investor_name', 'N/A')}")
+    print(f"  Total Value: ₹{portfolio_data.get('total_value', 0):,.2f}")
+    print(f"  Total Invested: ₹{portfolio_data.get('total_invested', 0):,.2f}")
+    print(f"  Total Gain: ₹{portfolio_data.get('total_gain', 0):,.2f} ({portfolio_data.get('total_gain_percent', 0):.2f}%)")
+    print(f"  Portfolio XIRR: {portfolio_data.get('xirr', 0):.2f}%")
+    print(f"  Holdings: {portfolio_data.get('num_funds', 0)}")
+    print(f"  Active SIPs: {portfolio_data.get('num_active_sips', 0)}")
+    print(f"  Brokers: {portfolio_data.get('num_brokers', 0)}")
+    print()
     
-    if not files_exist:
-        print(f"\n⚠️  Sample data files not found: {', '.join(missing)}")
-        print("Please upload MF Central files first.")
-        return False
-    
-    # File paths
-    base_dir = Path(__file__).parent
-    consolidated_path = base_dir / "CCJN4KTLB310840997771IMBAS199068013/CurrentValuationAS199068013.json"
-    transaction_path = base_dir / "CCJN4KTLB310840997771IMBAS199068013/AS199068013.json"
-    detailed_path = base_dir / "70910727520211641ZF683740997FF11IMBPF199067986.json"
-    
-    try:
-        # Load files
-        print("\n1. Loading JSON files...")
-        consolidated_data, transaction_data, detailed_data = load_mf_central_files(
-            consolidated_path,
-            transaction_path,
-            detailed_path
-        )
-        print(f"   ✓ Loaded consolidated portfolio: {len(consolidated_data['dtTrxnResult'])} entries")
-        print(f"   ✓ Loaded transactions: {len(transaction_data['dtTrxnResult'])} entries")
-        print(f"   ✓ Loaded detailed report: {len(detailed_data)} entries")
-        
-        # Validate
-        print("\n2. Validating data...")
-        is_valid, error = validate_mf_central_data(consolidated_data, transaction_data, detailed_data)
-        if not is_valid:
-            print(f"   ✗ Validation error: {error}")
-            return False
-        print("   ✓ Data validation successful")
-        
-        # Process
-        print("\n3. Processing data...")
-        portfolio_data, transactions = process_mf_central_data(
-            consolidated_data,
-            transaction_data,
-            detailed_data,
-            save_to_db=True,
-            index_for_qa=True
-        )
-        print("   ✓ Data processing successful")
-        
-        # Display summary
-        print("\n" + "=" * 80)
-        print("PORTFOLIO SUMMARY")
-        print("=" * 80)
-        
-        summary = get_portfolio_summary(portfolio_data)
-        print(f"\nInvestor: {summary['investor_name']}")
-        print(f"PAN: {summary['pan']}")
-        print(f"\nTotal Value: ₹{summary['total_value']:,.2f}")
-        print(f"Total Invested: ₹{summary['total_invested']:,.2f}")
-        print(f"Total Gain: ₹{summary['total_gain']:,.2f} ({summary['total_gain_percent']:.2f}%)")
-        print(f"Portfolio XIRR: {summary['xirr']:.2f}%")
-        print(f"\nFunds: {summary['num_funds']}")
-        print(f"Aggregated Funds: {summary['num_aggregated_funds']}")
-        print(f"Active SIPs: {summary['num_active_sips']}")
-        print(f"Brokers: {summary['num_brokers']}")
-        
-        # Transaction summary
-        txn_summary = get_transaction_summary(transactions)
-        print(f"\nTotal Transactions: {txn_summary['total']}")
-        for txn_type, count in txn_summary['by_type'].items():
-            print(f"  {txn_type}: {count}")
-        
-        print("\n" + "=" * 80)
-        print("✅ TEST COMPLETED SUCCESSFULLY")
-        print("=" * 80)
-        
-        return True
-        
-    except Exception as e:
-        print(f"\n✗ Error: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return False
+except Exception as e:
+    print(f"❌ Processing failed: {str(e)}")
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
 
+# Test 3: Save to database
+print("▶ Saving to Database...")
+try:
+    store = PortfolioStore()
+    store.save_complete_data(
+        portfolio=portfolio_data,
+        transactions=[],
+        sips=portfolio_data.get('active_sips', []),
+        broker_info=portfolio_data.get('broker_info', {}),
+        aggregation_map={}
+    )
+    print("✅ Database save successful")
+    print()
+except Exception as e:
+    print(f"❌ Database save failed: {str(e)}")
+    import traceback
+    traceback.print_exc()
 
-def test_config():
-    """Test configuration"""
-    print("\n" + "=" * 80)
-    print("CONFIGURATION TEST")
-    print("=" * 80)
-    
-    try:
-        import config
-        print(f"\n✓ Primary LLM: {config.PRIMARY_LLM_MODEL}")
-        print(f"✓ RAG LLM: {config.RAG_LLM_MODEL}")
-        print(f"✓ Reasoning LLM: {config.REASONING_LLM_MODEL}")
-        print(f"✓ Data directory: {config.DATA_DIR}")
-        return True
-    except Exception as e:
-        print(f"\n✗ Config Error: {str(e)}")
-        return False
+# Test 4: Vector indexing
+print("▶ Testing Vector Indexing...")
+try:
+    index_portfolio_data(portfolio_data)
+    print("✅ Vector indexing successful")
+    print()
+except Exception as e:
+    print(f"⚠️  Vector indexing skipped: {str(e)}")
+    print()
 
+# Test 5: Display Holdings Sample
+print("▶ Sample Holdings (First 5):")
+print("-" * 80)
+holdings = portfolio_data.get('holdings', [])
+for i, h in enumerate(holdings[:5], 1):
+    print(f"{i}. {h.get('scheme_name', 'N/A')[:50]:50s}")
+    print(f"   Current Value: ₹{h.get('current_value', 0):>12,.2f}")
+    print(f"   Invested:      ₹{h.get('cost_value', 0):>12,.2f}")
+    print(f"   Gain/Loss:     ₹{h.get('gain_loss', 0):>12,.2f} ({h.get('gain_loss_percent', 0):>6.2f}%)")
+    print(f"   XIRR:          {h.get('xirr', 0):>6.2f}%")
+    print(f"   Broker:        {h.get('broker', 'Unknown')}")
+    print()
 
-def test_portfolio_store():
-    """Test portfolio storage"""
-    print("\n" + "=" * 80)
-    print("PORTFOLIO STORAGE TEST")
-    print("=" * 80)
-    
-    try:
-        portfolio = load_portfolio_from_db()
-        
-        if portfolio:
-            summary = get_portfolio_summary(portfolio)
-            print(f"\n✓ Portfolio loaded from storage")
-            print(f"  Total value: ₹{summary['total_value']:,.0f}")
-            print(f"  Holdings: {len(portfolio.get('holdings', []))}")
-            print(f"  Active SIPs: {summary['num_active_sips']}")
-            print(f"  Data source: {summary['data_source']}")
-            return True
-        else:
-            print("\n⚠️  No portfolio data in storage")
-            return False
-    except Exception as e:
-        print(f"\n✗ Storage Error: {str(e)}")
-        return False
+# Test 6: Display Active SIPs
+print("▶ Active SIPs:")
+print("-" * 80)
+active_sips = portfolio_data.get('active_sips', [])
+if active_sips:
+    for i, sip in enumerate(active_sips, 1):
+        print(f"{i}. {sip.get('scheme_name', 'N/A')[:50]:50s}")
+        print(f"   Amount:     ₹{sip.get('sip_amount', 0):>10,.2f}")
+        print(f"   Frequency:  {sip.get('frequency', 'N/A'):>10s}")
+        print(f"   Last Date:  {sip.get('last_installment_date', 'N/A')}")
+        print(f"   Broker:     {sip.get('broker', 'Unknown')}")
+        print()
+else:
+    print("No active SIPs found")
+    print()
 
+# Test 7: Display Broker Summary
+print("▶ Broker Summary:")
+print("-" * 80)
+broker_info = portfolio_data.get('broker_info', {})
+if broker_info:
+    for broker, info in broker_info.items():
+        print(f"Broker: {broker}")
+        print(f"  Total Invested:  ₹{info.get('total_invested', 0):,.2f}")
+        print(f"  Schemes:         {info.get('scheme_count', 0)}")
+        print(f"  Transactions:    {info.get('transaction_count', 0)}")
+        print()
+else:
+    print("No broker information found")
+    print()
 
-def test_calculations():
-    """Test financial calculations"""
-    print("\n" + "=" * 80)
-    print("CALCULATIONS TEST")
-    print("=" * 80)
-    
-    try:
-        from calculations.returns import calculate_cagr, calculate_allocation
-        
-        # Test CAGR
-        cagr = calculate_cagr(100000, 150000, 3)
-        print(f"\n✓ CAGR (₹1L → ₹1.5L in 3Y): {cagr:.2f}%")
-        
-        # Test allocation
-        sample_holdings = [
-            {'current_value': 100000, 'type': 'Equity', 'scheme_name': 'Large Cap Fund'},
-            {'current_value': 50000, 'type': 'Debt', 'scheme_name': 'Debt Fund'},
-        ]
-        allocation = calculate_allocation(sample_holdings)
-        print(f"✓ Allocation: Equity {allocation['equity']:.1f}%, Debt {allocation['debt']:.1f}%")
-        
-        return True
-    except Exception as e:
-        print(f"\n✗ Calculation Error: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return False
+# Test 8: Test Q&A Agent
+print("▶ Testing Q&A Agent (Intent Classification):")
+print("-" * 80)
 
+test_queries = [
+    "What is my total portfolio value?",
+    "How many SIPs do I have?",
+    "Which fund has the best XIRR?",
+    "Should I rebalance my portfolio?",
+    "What is the latest market trend for tech funds?"
+]
 
-def main():
-    """Run all tests"""
-    print("\n" + "=" * 80)
-    print("MF PORTFOLIO ANALYZER - COMPREHENSIVE TEST SUITE")
-    print("=" * 80)
+try:
+    classifier = IntentClassifier()
     
-    results = []
+    for query in test_queries:
+        intents = classifier.classify(query)
+        print(f"Query: {query}")
+        print(f"  → Intents: {', '.join(intents)}")
+        print()
     
-    # Test 1: Imports (CRITICAL - must pass)
-    results.append(("Imports", test_imports()))
-    
-    if not results[0][1]:
-        print("\n❌ CRITICAL: Import test failed. Cannot continue.")
-        sys.exit(1)
-    
-    # Test 2: Configuration
-    results.append(("Configuration", test_config()))
-    
-    # Test 3: MF Central Parser
-    results.append(("MF Central Parser", test_mf_central_parser()))
-    
-    # Test 4: Portfolio Storage
-    results.append(("Portfolio Storage", test_portfolio_store()))
-    
-    # Test 5: Calculations
-    results.append(("Calculations", test_calculations()))
-    
-    # Summary
-    print("\n" + "=" * 80)
-    print("TEST SUMMARY")
-    print("=" * 80)
-    
-    for test_name, result in results:
-        status = "✅ PASS" if result else "❌ FAIL"
-        print(f"{status} - {test_name}")
-    
-    passed = sum(1 for _, result in results if result)
-    total = len(results)
-    
-    print(f"\nPassed: {passed}/{total}")
-    
-    if passed == total:
-        print("\n🎉 All tests passed!")
-        print("\n" + "=" * 80)
-        print("NEXT STEPS")
-        print("=" * 80)
-        print("\nTo run the Streamlit app:")
-        print("  streamlit run app.py")
-        print("\nThe app will be available at: http://localhost:8501")
-        return 0
-    else:
-        print("\n⚠️  Some tests failed. Please check the errors above.")
-        return 1
+    print("✅ Intent classification successful")
+    print()
+except Exception as e:
+    print(f"⚠️  Intent classification failed: {str(e)}")
+    import traceback
+    traceback.print_exc()
+    print()
 
-
-if __name__ == "__main__":
-    sys.exit(main())
+# Summary
+print("=" * 80)
+print("DEBUG SESSION COMPLETE")
+print("=" * 80)
+print()
+print("✅ Portfolio data processed successfully")
+print(f"✅ {len(holdings)} holdings loaded")
+print(f"✅ {len(active_sips)} active SIPs found")
+print(f"✅ {len(broker_info)} brokers identified")
+print()
+print("Ready for Q&A queries via Flask UI!")
+print()

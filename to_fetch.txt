@@ -1,6 +1,0 @@
-cas_detailed_report.xlsx -> mfcentral (Excel detailed report with all holdings)
-TRANSACTION DETAILS STATEMENT -> extract zip to get AS*.json (for SIPs and broker info)
-CONSOLIDATED PORTFOLIO STATEMENT -> extract zip to get CurrentValuation*.json (optional, for validation)
-
-Primary Data Source: Excel (most current holdings)
-Secondary: Transaction JSON (for SIPs, brokers, transaction history)

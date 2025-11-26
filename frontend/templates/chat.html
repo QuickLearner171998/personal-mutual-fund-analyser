@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block title %}AI Chat - MF Portfolio Analyzer{% endblock %}
+
+{% block content %}
+<div>
+    <div style="margin-bottom: 2rem;">
+        <h1>AI Q&A Assistant</h1>
+        <p style="color: var(--text-secondary);">Ask questions about your portfolio</p>
+    </div>
+
+    <div class="card">
+        <!-- Chat History -->
+        <div id="chat-history"
+            style="max-height: 500px; overflow-y: auto; padding: 1rem; margin-bottom: 1rem; border: 1px solid var(--glass-border); border-radius: var(--radius-md); background: var(--bg-secondary);">
+            {% if history %}
+            {% for msg in history %}
+            <div
+                style="margin-bottom: 1rem; padding: 0.75rem; border-radius: var(--radius-md); background: {% if msg.role == 'user' %}var(--bg-tertiary){% else %}var(--primary){% endif %}; color: white;">
+                <strong>{% if msg.role == 'user' %}You{% else %}AI Assistant{% endif %}:</strong>
+                <p style="margin: 0.5rem 0 0 0; color: white;">{{ msg.content }}</p>
+            </div>
+            {% endfor %}
+            {% else %}
+            <p style="color: var(--text-muted); text-align: center;">No chat history. Start by asking a question!</p>
+            {% endif %}
+        </div>
+
+        <!-- Chat Form -->
+        <form id="chat-form" onsubmit="sendMessage(event)">
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <textarea id="message-input" class="form-control" placeholder="Ask a question about your portfolio..."
+                    rows="3" required></textarea>
+            </div>
+
+            <div style="display: flex; gap: 1rem; justify-content: flex-end">
+                <button type="submit" class="btn btn-primary" id="send-btn">
+                    Send Message
+                </button>
+            </div>
+        </form>
+
+        <!-- Response Area -->
+        <div id="response-area" style="margin-top: 1rem; display: none;">
+            <div style="padding: 1rem; background: var(--primary); border-radius: var(--radius-md); color: white;">
+                <strong>AI Assistant:</strong>
+                <p id="response-text" style="margin: 0.5rem 0 0 0; color: white;"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Questions -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Quick Questions</h3>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
+            <button class="btn btn-secondary" onclick="askQuestion('What is my total portfolio value?')">
+                What is my total portfolio value?
+            </button>
+            <button class="btn btn-secondary" onclick="askQuestion('Which fund has the best XIRR?')">
+                Which fund has best XIRR?
+            </button>
+            <button class="btn btn-secondary" onclick="askQuestion('How many SIPs do I have?')">
+                How many SIPs do I have?
+            </button>
+            <button class="btn btn-secondary" onclick="askQuestion('Should I rebalance my portfolio?')">
+                Should I rebalance?
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Simple chat functionality
+    function askQuestion(question) {
+        document.getElementById('message-input').value = question;
+        document.getElementById('chat-form').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    async function sendMessage(event) {
+        event.preventDefault();
+
+        const messageInput = document.getElementById('message-input');
+        const message = messageInput.value.trim();
+
+        if (!message) return;
+
+        const sendBtn = document.getElementById('send-btn');
+        const responseArea = document.getElementById('response-area');
+        const responseText = document.getElementById('response-text');
+
+        // Disable button
+        sendBtn.disabled = true;
+        sendBtn.textContent = 'Sending...';
+
+        try {
+            const formData = new FormData();
+            formData.append('message', message);
+
+            const response = await fetch('{{ url_for("chat") }}', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to get response');
+            }
+
+            const data = await response.json();
+
+            // Show response
+            responseText.textContent = data.response;
+            responseArea.style.display = 'block';
+
+            // Clear input
+            messageInput.value = '';
+
+            // Reload page after 2 seconds to show in history
+            setTimeout(() => {
+                window.location.reload();
+            }, 2000);
+
+        } catch (error) {
+            alert('Error: ' + error.message);
+        } finally {
+            sendBtn.disabled = false;
+            sendBtn.textContent = 'Send Message';
+        }
+    }
+
+    // Auto-scroll chat history to bottom
+    document.addEventListener('DOMContentLoaded', () => {
+        const chatHistory = document.getElementById('chat-history');
+        chatHistory.scrollTop = chatHistory.scrollHeight;
+    });
+</script>
+{% endblock %}

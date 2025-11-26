@@ -4,252 +4,141 @@ AI-powered mutual fund portfolio analyzer with comprehensive analytics, SIP trac
 
 ## 🎯 Features
 
-### Core Functionality
-- 📁 **MF Central Data Import** - Upload 3 JSON files from MF Central
-- 📊 **Enhanced Dashboard** - Portfolio overview with XIRR, CAGR, and detailed analytics
-- 💰 **SIP Analytics** - Track active SIPs, upcoming installments, and performance
-- 🤝 **Broker Analysis** - Investment breakdown by broker/intermediary
-- 📈 **Fund Aggregation** - Automatically merge duplicate funds across folios
+- 📁 **MF Central Data Import** - Upload 3 files (Excel + 2 JSONs) from MF Central
+- 📊 **Portfolio Dashboard** - Complete overview with XIRR, gains, and holdings
+- 💰 **SIP Analytics** - Track active SIPs and upcoming installments
 - 💬 **AI Q&A** - Ask questions about your portfolio using natural language
-- 💾 **Local Storage** - All data stored locally in JSON files (no cloud/database)
-
-### Analytics
-- **XIRR Calculation** - Fund-level and portfolio-wide XIRR
-- **CAGR Analysis** - Period-wise CAGR (1Y, 3Y, 5Y)
-- **Asset Allocation** - Detailed breakdown by type and category
-- **Performance Tracking** - Top/bottom performers with charts
-- **SIP Returns** - Dedicated SIP performance analysis
+- 🤝 **Broker Analysis** - Investment breakdown by broker/intermediary
 
 ## 🚀 Quick Start
 
-### 1. Setup
+### 1. Install Dependencies
 
 ```bash
-# Clone repository
-git clone <repo-url>
-cd personal-mutual-fund-analyser
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Configure environment
-cp .env.example .env
-# Edit .env and add your API keys
+pip install --break-system-packages -r requirements.txt
 ```
 
-### 2. Test the Parser
+### 2. Run the Application
 
 ```bash
-# Run test suite
-python main.py
+./run.sh
 ```
 
-Expected output:
-```
-✅ PASS - Configuration
-✅ PASS - MF Central Parser
-✅ PASS - Portfolio Storage
-✅ PASS - Calculations
+The app will be available at: **http://localhost:5000**
 
-Passed: 4/4
-```
+## 📥 Upload Your Data
 
-### 3. Run the App
+1. Go to **Upload Data** page
+2. Upload 3 files from MF Central:
+   - **Excel Report**: `cas_detailed_report_*.xlsx`
+   - **Transaction JSON**: `AS*.json`
+   - **XIRR JSON**: `*IMBPF*.json`
+3. Click "Upload and Process Files"
+4. View your dashboard!
 
-```bash
-streamlit run app.py
-```
+## 🏗️ Architecture
 
-The app will be available at: http://localhost:8501
+### Single Flask Server
+- **Flask** handles all routes and rendering
+- **Server-side rendering** with Jinja2 templates
+- **Direct integration** with existing backend code:
+  - `core/unified_processor.py` - Data processing
+  - `database/json_store.py` - Local storage
+  - `agents/orchestrator.py` - AI Q&A
 
-## 📥 Data Upload
-
-### Required Files from MF Central
-
-1. **CONSOLIDATED PORTFOLIO STATEMENT**
-   - Download from: MF Central → Portfolio → Consolidated Portfolio Statement
-   - Extract ZIP file
-   - Upload: `CurrentValuationAS*.json`
-
-2. **TRANSACTION DETAILS STATEMENT**
-   - Download from: MF Central → Transactions → Transaction Details Statement
-   - Extract ZIP file
-   - Upload: `AS*.json`
-
-3. **Detailed Report with XIRR**
-   - Download from: MF Central → Reports → Detailed Report
-   - Upload: `*IMBPF*.json`
-
-### Upload Process
-
-1. Go to "📁 Upload MF Central Data"
-2. Upload all 3 JSON files
-3. Click "Process Files"
-4. View your portfolio in the Dashboard
-
-## 🔧 Configuration
-
-### API Keys (Required)
-
-```bash
-# .env file
-OPENAI_API_KEY=sk-...           # For GPT-4o/GPT-4o-mini
-GOOGLE_API_KEY=...              # For Gemini fallback
-PERPLEXITY_API_KEY=pplx-...     # For market research
-```
-
-### LLM Models
-
-```bash
-PRIMARY_LLM_MODEL=gpt-5                    # General tasks with reasoning
-RAG_LLM_MODEL=gpt-4.1-mini                # Fast RAG queries
-REASONING_LLM_MODEL=gpt-5                 # Complex thinking
-FALLBACK_LLM_MODEL=gemini-2.0-flash-exp   # Fallback
-PERPLEXITY_MODEL=sonar-pro                # Market research
-```
-
-See [docs/LLM_USAGE.md](docs/LLM_USAGE.md) for detailed LLM documentation.
-
-## 📊 Dashboard Features
-
-### Main Dashboard
-- **Portfolio Overview**: Total value, invested amount, gain/loss, XIRR
-- **View Toggle**: Switch between aggregated and individual folio views
-- **Holdings Table**: Enhanced with XIRR, broker, and aggregation columns
-- **Top Performers**: XIRR-based ranking with interactive charts
-- **Asset Allocation**: Pie chart breakdown by fund type
-- **Broker Analysis**: Investment distribution across brokers
-- **Category Performance**: Type-wise performance summary
-
-### SIP Analytics
-- **SIP Overview**: Active count, monthly outflow, total invested
-- **Upcoming Calendar**: Next 30 days installment schedule
-- **SIP Details**: Complete SIP information table
-- **Performance Analysis**: SIP-specific XIRR and returns
-- **Contribution Timeline**: Monthly SIP investment chart
-
-## 🤖 AI Q&A (Multi-Agent System)
-
-Ask questions like:
-- "What is my total investment?"
-- "Show me my top performing funds"
-- "Which broker has my best funds?"
-- "When is my next SIP installment?"
-- "Compare HDFC Flexi Cap vs ICICI Flexi Cap"
-- "How much to invest for retirement?"
-
-### Available Agents
-- **Portfolio Agent** - Portfolio-specific queries (uses RAG)
-- **Market Agent** - Real-time market data (uses Perplexity)
-- **Strategy Agent** - Investment recommendations
-- **Comparison Agent** - Fund comparisons
-- **Goal Agent** - Financial goal planning
-- **Coordinator** - Routes queries to appropriate agent
-
-## 📁 Project Structure
+### Project Structure
 
 ```
 personal-mutual-fund-analyser/
-├── app.py                          # Main Streamlit app
-├── main.py                         # Test suite
-├── config.py                       # Configuration
+├── frontend/
+│   ├── app.py                      # Main Flask application
+│   ├── templates/
+│   │   ├── base.html              # Base template
+│   │   ├── dashboard.html         # Dashboard page
+│   │   ├── upload.html            # Upload page
+│   │   ├── sip_analytics.html     # SIP analytics
+│   │   └── chat.html              # AI chat
+│   └── static/
+│       ├── css/style.css          # Modern CSS
+│       └── js/                    # Minimal JS
 │
-├── cas_import/
-│   └── mf_central_parser.py        # MF Central JSON parser
-│
-├── models/
-│   └── portfolio.py                # Enhanced data models
-│
-├── database/
-│   └── json_store.py               # Local JSON storage
-│
-├── calculations/
-│   └── returns.py                  # XIRR, CAGR, SIP returns
-│
-├── ui/
-│   ├── dashboard.py                # Enhanced dashboard
-│   ├── sip_analytics.py            # SIP analytics
-│   ├── cas_upload.py               # MF Central upload
-│   └── chat.py                     # AI Q&A interface
-│
-├── agents/
-│   ├── coordinator.py              # Query routing
-│   ├── portfolio_agent.py          # Portfolio Q&A
-│   ├── market_agent.py             # Market research
-│   ├── strategy_agent.py           # Investment advice
-│   ├── comparison_agent.py         # Fund comparison
-│   └── goal_agent.py               # Goal planning
-│
-├── llm/
-│   ├── llm_wrapper.py              # Unified LLM interface
-│   └── prompts.py                  # Agent prompts
-│
-├── vector_db/
-│   ├── faiss_store.py              # Vector storage
-│   └── portfolio_indexer.py        # Portfolio indexing
-│
-└── docs/
-    ├── data_extraction_guide.md    # Data extraction details
-    ├── LLM_USAGE.md                # LLM usage documentation
-    ├── REVAMP_SUMMARY.md           # Implementation summary
-    └── CLEANUP.md                  # Cleanup summary
+├── core/                           # Data processing
+├── database/                       # JSON storage
+├── agents/                         # AI agents
+├── api_server.py                   # FastAPI (optional, for API-only use)
+└── run.sh                          # Start script
 ```
 
-## 🧪 Testing
+## 💻 Technology Stack
+
+### Backend
+- **Flask** - Web framework
+- **Python** - Core logic
+- Existing backend components (processors, database, agents)
+
+### Frontend
+- **Jinja2** - Template engine
+- **HTML/CSS** - Modern, responsive design
+- **Minimal JavaScript** - Only for form submissions
+
+## 🧪 Testing (Optional API)
+
+If you want to use the REST API:
 
 ```bash
-# Run all tests
-python main.py
+# Start FastAPI backend
+./run_backend.sh
 
-# Tests include:
-# - Configuration validation
-# - MF Central parser
-# - Portfolio storage
-# - Financial calculations
+# Test endpoints
+curl http://localhost:8000/api/health
+curl http://localhost:8000/api/portfolio/summary
+
+# API Docs
+open http://localhost:8000/docs
 ```
 
-## 📚 Documentation
+## 📊 Features In Detail
 
-- **[Data Extraction Guide](docs/data_extraction_guide.md)** - Detailed data extraction methodology
-- **[LLM Usage](docs/LLM_USAGE.md)** - LLM models and usage patterns
-- **[Implementation Summary](docs/REVAMP_SUMMARY.md)** - Complete implementation details
-- **[Cleanup Summary](docs/CLEANUP.md)** - Removed files and cleanup
+### Dashboard
+- Total portfolio value and invested amount
+- Gain/loss with percentage
+- Portfolio XIRR
+- Complete holdings table
+- Broker-wise breakdown
 
-## 🛠️ Tech Stack
+### SIP Analytics
+- Active SIPs count
+- Monthly outflow
+- Upcoming installments (next 30 days)
+- SIP details with broker info
 
-- **Frontend**: Streamlit, Plotly
-- **Data Processing**: Pandas, NumPy
-- **Calculations**: pyxirr (XIRR), custom CAGR
-- **Storage**: JSON files (local)
-- **Vector DB**: FAISS (local)
-- **LLMs**: 
-  - OpenAI GPT-5 (primary with reasoning)
-  - OpenAI GPT-4.1-mini (RAG)
-  - OpenAI GPT-5 (reasoning)
-  - Google Gemini 2.0 Flash (fallback)
-  - Perplexity Sonar Pro (market research)
-
-## 📈 Sample Results
-
-From test data:
-- **Portfolio Value**: ₹55.27 Lakhs
-- **Total Invested**: ₹42.50 Lakhs
-- **Total Gain**: ₹12.77 Lakhs (30.06%)
-- **Portfolio XIRR**: 16.79%
-- **Funds**: 26 (24 after aggregation)
-- **Active SIPs**: 11
-- **Brokers**: 5
+### AI Q&A
+- Ask questions about your portfolio
+- Multi-agent system for intelligent responses
+- Chat history
+- Quick question templates
 
 ## 🔒 Privacy
 
-- **100% Local**: All data stored locally in `./data/` directory
-- **No Cloud**: No MongoDB, no external databases
-- **No Uploads**: Data never leaves your machine
-- **API Calls**: Only for LLM queries (OpenAI, Google, Perplexity)
+- **100% Local** - All data stored in `./data/` directory
+- **No Cloud** - No external databases
+- **No Uploads** - Data never leaves your machine
+- **API Calls** - Only for LLM queries (OpenAI, Google, Perplexity)
+
+## 📝 Configuration
+
+Create a `.env` file with your API keys:
+
+```bash
+# LLM API Keys
+OPENAI_API_KEY=sk-...
+GOOGLE_API_KEY=...
+PERPLEXITY_API_KEY=pplx-...
+
+# Models
+PRIMARY_LLM_MODEL=gpt-4o
+FALLBACK_LLM_MODEL=gemini-2.0-flash-exp
+```
 
 ## 🤝 Contributing
 
@@ -262,14 +151,6 @@ Contributions welcome! Please:
 ## 📄 License
 
 MIT License - see LICENSE file for details
-
-## 🙏 Acknowledgments
-
-- MF Central for data sources
-- OpenAI for GPT models
-- Google for Gemini
-- Perplexity for market research API
-- Streamlit for the amazing framework
 
 ---
 

@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - MF Portfolio Analyzer{% endblock %}
+
+{% block content %}
+<div>
+    <div style="margin-bottom: 2rem;">
+        <h1>Portfolio Dashboard</h1>
+        <p style="color: var(--text-secondary);">Complete overview of your mutual fund investments</p>
+    </div>
+
+    {% if summary %}
+    <!-- Metrics Grid -->
+    <div class="metrics-grid">
+        <div class="metric-card">
+            <div class="metric-label">Total Value</div>
+            <div class="metric-value">{{ summary.total_value|currency }}</div>
+            <div class="metric-change">{{ summary.num_funds }} funds</div>
+        </div>
+
+        <div class="metric-card">
+            <div class="metric-label">Total Invested</div>
+            <div class="metric-value">{{ summary.total_invested|currency }}</div>
+            <div class="metric-change">{{ summary.num_active_sips }} active SIPs</div>
+        </div>
+
+        <div class="metric-card">
+            <div class="metric-label">Total Gain/Loss</div>
+            <div class="metric-value">{{ summary.total_gain|currency }}</div>
+            <div class="metric-change">{{ summary.total_gain_percent|percentage }}</div>
+        </div>
+
+        <div class="metric-card">
+            <div class="metric-label">Portfolio XIRR</div>
+            <div class="metric-value">{{ summary.xirr|percentage }}</div>
+            <div class="metric-change">{{ summary.num_brokers }} brokers</div>
+        </div>
+    </div>
+
+    <!-- Holdings Table -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Holdings</h3>
+            <p style="color: var(--text-muted); font-size: 0.875rem;">{{ holdings|length }} total holdings</p>
+        </div>
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Scheme Name</th>
+                        <th>Current Value</th>
+                        <th>Invested</th>
+                        <th>Gain/Loss</th>
+                        <th>Returns %</th>
+                        <th>XIRR %</th>
+                        <th>Broker</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for holding in holdings %}
+                    <tr>
+                        <td>{{ holding.scheme_name|truncate_text(50) }}</td>
+                        <td>{{ holding.current_value|currency }}</td>
+                        <td>{{ holding.cost_value|currency }}</td>
+                        <td
+                            style="color: {% if holding.gain_loss > 0 %}var(--success){% elif holding.gain_loss < 0 %}var(--danger){% else %}var(--text-secondary){% endif %}">
+                            {{ holding.gain_loss|currency }}
+                        </td>
+                        <td
+                            style="color: {% if holding.gain_loss_percent > 0 %}var(--success){% elif holding.gain_loss_percent < 0 %}var(--danger){% else %}var(--text-secondary){% endif %}">
+                            {{ holding.gain_loss_percent|percentage }}
+                        </td>
+                        <td
+                            style="color: {% if holding.xirr > 0 %}var(--success){% elif holding.xirr < 0 %}var(--danger){% else %}var(--text-secondary){% endif %}">
+                            {{ holding.xirr|percentage }}
+                        </td>
+                        <td>{{ holding.broker }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% else %}
+    <!-- Empty State -->
+    <div class="card" style="text-align: center; padding: 4rem 2rem;">
+        <h2 style="color: var(--text-muted); margin-bottom: 1rem;">No Portfolio Data</h2>
+        <p style="color: var(--text-muted); margin-bottom: 2rem;">
+            Please upload your MF Central files to get started
+        </p>
+        <a href="{{ url_for('upload') }}" class="btn btn-primary">Upload Data</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
