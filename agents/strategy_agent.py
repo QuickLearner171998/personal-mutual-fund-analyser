@@ -5,6 +5,7 @@ Provides investment strategy, rebalancing, and risk advice
 from llm.llm_wrapper import invoke_llm
 from llm.prompts import get_agent_prompt
 from database.json_store import PortfolioStore
+import config
 import json
 
 class StrategyAgent:
@@ -44,8 +45,15 @@ class StrategyAgent:
             {"role": "user", "content": prompt}
         ]
         
-        # Use reasoning model for complex strategy
-        return invoke_llm(messages, use_reasoning=False, stream=stream)
+        # Use gpt-5-mini with medium reasoning
+        return invoke_llm(
+            config.STRATEGY_LLM_MODEL,
+            messages,
+            max_tokens=config.STRATEGY_MAX_TOKENS,
+            timeout=config.STRATEGY_TIMEOUT,
+            reasoning_effort="medium",
+            stream=stream
+        )
 
 
 # Test

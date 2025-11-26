@@ -8,7 +8,7 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from agents.coordinator import IntentClassifier
+from agents.planning_agent import PlanningAgent
 from agents.portfolio_agent import PortfolioAgent
 from agents.goal_agent import GoalAgent
 from agents.market_agent import MarketAgent
@@ -19,13 +19,14 @@ from utils.logger import get_logger
 from utils.response_formatter import format_response
 from llm.llm_wrapper import invoke_llm
 import time
+import config
 
 logger = get_logger(__name__)
 
 class MultiAgentOrchestrator:
     def __init__(self):
         logger.info("Initializing MultiAgentOrchestrator")
-        self.classifier = IntentClassifier()
+        self.planner = PlanningAgent()
         self.agents = {
             'portfolio': PortfolioAgent(),
             'goal': GoalAgent(),
@@ -47,7 +48,7 @@ class MultiAgentOrchestrator:
         Returns:
             Synthesized response
         """
-        logger.info(f"Synthesizing {len(responses)} responses using gpt-4.1-mini")
+        logger.info(f"Synthesizing {len(responses)} responses using {config.SYNTHESIZER_LLM_MODEL}")
         
         # Build the synthesis prompt with complete context
         agent_outputs = []
@@ -96,8 +97,13 @@ Do NOT simply concatenate the responses. Do NOT mention "Agent X says" or "Accor
                 {"role": "user", "content": synthesis_prompt}
             ]
             
-            logger.info("Invoking gpt-4.1-mini for response synthesis")
-            synthesized = invoke_llm(messages, use_rag=True, stream=False)
+            logger.info(f"Invoking {config.SYNTHESIZER_LLM_MODEL} for response synthesis")
+            synthesized = invoke_llm(
+                config.SYNTHESIZER_LLM_MODEL,
+                messages,
+                max_tokens=config.SYNTHESIZER_MAX_TOKENS,
+                timeout=config.SYNTHESIZER_TIMEOUT
+            )
             logger.info(f"Successfully synthesized response ({len(synthesized)} chars)")
             
             # Apply formatting
@@ -116,7 +122,7 @@ Do NOT simply concatenate the responses. Do NOT mention "Agent X says" or "Accor
     
     def process_query(self, query: str, stream: bool = False) -> Union[str, Iterator]:
         """
-        Process user query through multi-agent system with error handling
+        Process user query through multi-agent system with planning
         
         Args:
             query: User's question
@@ -134,108 +140,95 @@ Do NOT simply concatenate the responses. Do NOT mention "Agent X says" or "Accor
         logger.info(f"Stream mode: {stream}")
         
         try:
-            # Step 1: Classify intent
-            logger.info("Step 1: Classifying intent with dedicated GPT-4.1 model")
-            intent_start = time.time()
-            intents = self.classifier.classify(query)
-            intent_time = time.time() - intent_start
-            logger.info(f"Classified intents: {intents} (took {intent_time:.2f}s)")
+            # Step 1: Create execution plan
+            logger.info("Step 1: Creating execution plan with Planning Agent")
+            planning_start = time.time()
+            plan = self.planner.create_plan(query)
+            planning_time = time.time() - planning_start
+            logger.info(f"Plan created: {plan['agents']} (took {planning_time:.2f}s)")
+            logger.info(f"Reasoning: {plan['reasoning']}")
             
-            # Step 2: Route to appropriate agent(s)
-            if len(intents) == 1:
-                # Single agent
-                intent = intents[0]
-                logger.info(f"Step 2: Routing to single agent: '{intent}'")
-                agent = self.agents.get(intent)
+            agents_to_execute = plan['execution_order']
+            
+            # Step 2: Execute agents based on plan
+            if len(agents_to_execute) == 1:
+                # Single agent execution
+                agent_name = agents_to_execute[0]
+                logger.info(f"Step 2: Executing single agent: '{agent_name}'")
+                agent = self.agents.get(agent_name)
                 
                 if not agent:
-                    logger.error(f"Agent for intent '{intent}' not found")
-                    return f"⚠️ Agent for '{intent}' not found. Please try rephrasing your question."
+                    logger.error(f"Agent '{agent_name}' not found")
+                    return f"⚠️ Agent '{agent_name}' not available. Please try rephrasing your question."
                 
                 try:
                     logger.info("=" * 60)
-                    logger.info(f"EXECUTING AGENT: {intent.upper()}")
+                    logger.info(f"EXECUTING AGENT: {agent_name.upper()}")
                     logger.info("=" * 60)
                     
                     agent_start = time.time()
-                    
-                    if intent == 'portfolio':
-                        logger.info("Portfolio Agent analyzing holdings and performance...")
-                        response = agent.analyze(query, stream)
-                    elif intent == 'goal':
-                        logger.info("Goal Agent planning financial objectives...")
-                        response = agent.plan(query, stream)
-                    elif intent == 'market':
-                        logger.info("Market Agent researching current conditions...")
-                        response = agent.research(query, stream)
-                    elif intent == 'strategy':
-                        logger.info("Strategy Agent formulating recommendations...")
-                        response = agent.advise(query, stream)
-                    elif intent == 'comparison':
-                        logger.info("Comparison Agent evaluating funds...")
-                        response = agent.compare([], stream)
-                    
+                    response = self._execute_agent(agent_name, agent, query, stream)
                     agent_time = time.time() - agent_start
-                    logger.info(f"{intent.upper()} AGENT COMPLETED SUCCESSFULLY (took {agent_time:.2f}s)")
+                    
+                    logger.info(f"{agent_name.upper()} AGENT COMPLETED (took {agent_time:.2f}s)")
                     logger.info("=" * 60)
                     
-                    # Format response for better readability (only if not streaming)
+                    # Format response (only if not streaming)
                     if not stream and isinstance(response, str):
                         response = format_response(response)
                     
                     total_time = time.time() - query_start_time
                     logger.info(f"TOTAL QUERY PROCESSING TIME: {total_time:.2f}s")
+                    logger.info(f"  - Planning: {planning_time:.2f}s")
+                    logger.info(f"  - {agent_name}: {agent_time:.2f}s")
+                    
                     return response
                     
                 except Exception as e:
-                    logger.error(f"Error in {intent} agent: {str(e)}")
-                    return f"⚠️ Error in {intent} agent: {str(e)}\n\nPlease try a different question or check if your portfolio data is loaded."
+                    logger.error(f"Error in {agent_name} agent: {str(e)}")
+                    return f"⚠️ Error in {agent_name} agent: {str(e)}\n\nPlease try a different question or check if your portfolio data is loaded."
             
             else:
-                # Multiple agents needed - run sequentially and synthesize
-                logger.info(f"Step 2: Routing to multiple agents: {intents}")
+                # Multiple agents execution
+                logger.info(f"Step 2: Executing {len(agents_to_execute)} agents: {agents_to_execute}")
                 responses = []
                 agent_timings = []
                 
-                for intent in intents:
-                    logger.info(f"Processing intent: '{intent}'")
-                    agent = self.agents.get(intent)
+                for idx, agent_name in enumerate(agents_to_execute):
+                    logger.info(f"Processing agent {idx + 1}/{len(agents_to_execute)}: '{agent_name}'")
+                    agent = self.agents.get(agent_name)
                     
                     if not agent:
-                        logger.warning(f"Agent for intent '{intent}' not found, skipping")
+                        logger.warning(f"Agent '{agent_name}' not found, skipping")
                         continue
                     
                     try:
                         logger.info("=" * 60)
-                        logger.info(f"EXECUTING AGENT {intents.index(intent) + 1}/{len(intents)}: {intent.upper()}")
+                        logger.info(f"EXECUTING AGENT {idx + 1}/{len(agents_to_execute)}: {agent_name.upper()}")
                         logger.info("=" * 60)
                         
                         agent_start = time.time()
-                        
-                        if intent == 'portfolio':
-                            logger.info("Portfolio Agent analyzing holdings and performance...")
-                            responses.append(("Portfolio Analysis", agent.analyze(query)))
-                        elif intent == 'goal':
-                            logger.info("Goal Agent planning financial objectives...")
-                            responses.append(("Goal Planning", agent.plan(query)))
-                        elif intent == 'market':
-                            logger.info("Market Agent researching current conditions...")
-                            responses.append(("Market Research", agent.research(query)))
-                        elif intent == 'strategy':
-                            logger.info("Strategy Agent formulating recommendations...")
-                            responses.append(("Strategy Advice", agent.advise(query)))
-                        elif intent == 'comparison':
-                            logger.info("Comparison Agent evaluating funds...")
-                            responses.append(("Fund Comparison", agent.compare([])))
-                        
+                        response = self._execute_agent(agent_name, agent, query, stream=False)
                         agent_time = time.time() - agent_start
-                        agent_timings.append((intent, agent_time))
-                        logger.info(f"{intent.upper()} AGENT COMPLETED SUCCESSFULLY (took {agent_time:.2f}s)")
+                        
+                        agent_timings.append((agent_name, agent_time))
+                        
+                        # Map agent name to display title
+                        title_map = {
+                            'portfolio': 'Portfolio Analysis',
+                            'market': 'Market Research',
+                            'strategy': 'Strategy Recommendation',
+                            'comparison': 'Fund Comparison',
+                            'goal': 'Goal Planning'
+                        }
+                        responses.append((title_map.get(agent_name, agent_name.title()), response))
+                        
+                        logger.info(f"{agent_name.upper()} AGENT COMPLETED (took {agent_time:.2f}s)")
                         logger.info("=" * 60)
                         
                     except Exception as e:
-                        logger.error(f"Error in {intent} agent: {str(e)}")
-                        responses.append((f"{intent.title()} Agent", f"⚠️ Error: {str(e)}"))
+                        logger.error(f"Error in {agent_name} agent: {str(e)}")
+                        responses.append((agent_name.title(), f"⚠️ Error: {str(e)}"))
                 
                 if not responses:
                     logger.error("No responses received from any agent")
@@ -248,8 +241,8 @@ Do NOT simply concatenate the responses. Do NOT mention "Agent X says" or "Accor
                     logger.info(f"  {agent_name}: {timing:.2f}s")
                 logger.info("=" * 60)
                 
-                # Use LLM to synthesize responses intelligently
-                logger.info(f"Using gpt-4.1-mini to synthesize {len(responses)} agent responses")
+                # Use LLM to synthesize responses
+                logger.info(f"Using {config.SYNTHESIZER_LLM_MODEL} to synthesize {len(responses)} agent responses")
                 synthesis_start = time.time()
                 synthesized = self._synthesize_responses(query, responses)
                 synthesis_time = time.time() - synthesis_start
@@ -258,17 +251,39 @@ Do NOT simply concatenate the responses. Do NOT mention "Agent X says" or "Accor
                 total_time = time.time() - query_start_time
                 logger.info("=" * 60)
                 logger.info(f"TOTAL QUERY PROCESSING TIME: {total_time:.2f}s")
-                logger.info(f"  - Intent Classification: {intent_time:.2f}s")
+                logger.info(f"  - Planning: {planning_time:.2f}s")
                 for agent_name, timing in agent_timings:
-                    logger.info(f"  - {agent_name} Agent: {timing:.2f}s")
-                logger.info(f"  - Response Synthesis: {synthesis_time:.2f}s")
+                    logger.info(f"  - {agent_name}: {timing:.2f}s")
+                logger.info(f"  - Synthesis: {synthesis_time:.2f}s")
                 logger.info("=" * 60)
                 
                 return synthesized
                 
         except Exception as e:
             logger.error(f"System error in orchestrator: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
             return f"⚠️ System error: {str(e)}\n\nPlease try again or contact support if the issue persists."
+    
+    def _execute_agent(self, agent_name: str, agent, query: str, stream: bool = False):
+        """Execute a single agent based on its name"""
+        if agent_name == 'portfolio':
+            logger.info("Portfolio Agent analyzing holdings and performance...")
+            return agent.analyze(query, stream)
+        elif agent_name == 'goal':
+            logger.info("Goal Agent planning financial objectives...")
+            return agent.plan(query, stream)
+        elif agent_name == 'market':
+            logger.info("Market Agent researching current conditions...")
+            return agent.research(query, stream)
+        elif agent_name == 'strategy':
+            logger.info("Strategy Agent formulating recommendations...")
+            return agent.advise(query, stream)
+        elif agent_name == 'comparison':
+            logger.info("Comparison Agent evaluating funds...")
+            return agent.compare(query, stream)
+        else:
+            raise ValueError(f"Unknown agent: {agent_name}")
 
 
 # Global instance

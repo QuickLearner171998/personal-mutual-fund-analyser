@@ -2,6 +2,7 @@ from llm.llm_wrapper import invoke_llm
 from llm.prompts import get_agent_prompt
 from database.json_store import PortfolioStore
 from vector_db.faiss_store import LocalVectorStore
+import config
 import json
 
 class PortfolioAgent:
@@ -64,7 +65,13 @@ class PortfolioAgent:
         ]
         
         # Use RAG model (gpt-4o-mini) for portfolio queries
-        return invoke_llm(messages, use_rag=True, stream=stream)
+        return invoke_llm(
+            config.PORTFOLIO_LLM_MODEL,
+            messages,
+            max_tokens=config.PORTFOLIO_MAX_TOKENS,
+            timeout=config.PORTFOLIO_TIMEOUT,
+            stream=stream
+        )
     
     def _get_top_holdings(self, portfolio, n=5):
         """Get top N holdings by value"""

@@ -5,6 +5,7 @@ Helps with SIP calculations, goal tracking, and future planning
 from llm.llm_wrapper import invoke_llm
 from llm.prompts import get_agent_prompt
 from database.json_store import PortfolioStore
+import config
 import json
 
 class GoalAgent:
@@ -38,8 +39,15 @@ class GoalAgent:
             {"role": "user", "content": prompt}
         ]
         
-        # Use reasoning model for complex calculations
-        return invoke_llm(messages, use_reasoning=False, stream=stream)
+        # Use gpt-5-mini with medium reasoning
+        return invoke_llm(
+            config.GOAL_LLM_MODEL,
+            messages,
+            max_tokens=config.GOAL_MAX_TOKENS,
+            timeout=config.GOAL_TIMEOUT,
+            reasoning_effort="medium",
+            stream=stream
+        )
     
     def _estimate_current_sip(self, portfolio):
         """Estimate current monthly SIP from transactions"""
